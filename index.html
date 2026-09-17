@@ -568,13 +568,22 @@ async function doSetup(){
   const k = document.getElementById('sbKeyInput').value.trim();
   const naam = document.getElementById('setupAdminNaam').value.trim();
   const pwd = document.getElementById('setupAdminPwd').value;
-  if(!u||!k||!naam||!pwd){ toast('Vul alle velden in', true); return; }
-  const pwdErr = validPwd(pwd);
-  if(pwdErr){ toast(pwdErr, true); return; }
+  if(!u||!k){ toast('Vul in elk geval de Project URL en key in', true); return; }
   SBU=u; SBK=k;
   try{
     const bestaand = await sbG('admins','select=id&limit=1');
-    if(bestaand && bestaand.length){ toast('Er bestaat al een admin-account — gebruik de Admin-inlog.', true); return; }
+    if(bestaand && bestaand.length){
+      // Er bestaat al een admin-account (bijv. bij het openen van de app op een nieuw
+      // domein/device) — gewoon verbinden met de bestaande data, geen nieuw account aanmaken.
+      localStorage.setItem('sbUrl', u);
+      localStorage.setItem('sbKey', k);
+      toast('Verbonden! Log in met je bestaande admin-account.');
+      await boot();
+      return;
+    }
+    if(!naam||!pwd){ toast('Vul ook een admin-naam en wachtwoord in om het eerste account aan te maken', true); return; }
+    const pwdErr = validPwd(pwd);
+    if(pwdErr){ toast(pwdErr, true); return; }
     const hash = await maakHash(pwd);
     await sbP('admins', {naam, pwd_hash:hash});
     localStorage.setItem('sbUrl', u);
