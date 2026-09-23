@@ -1,6 +1,5 @@
 name: Test
 
-
 on:
   push:
     branches: [ main ]
@@ -17,6 +16,4 @@ jobs:
           node-version: '20'
       - run: node tests/syntax-check.js
       - run: node tests/score-grid.test.js
-      - run: node tests/admin-race.test.jsc: 1
-      d: 2
-      
+      - run: node tests/admin-race.test.js
