@@ -318,7 +318,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.32.1';
+const APP_VERSION = '1.32.2';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -4076,8 +4076,8 @@ function klsKolomHeaderHtml(l, r0, toonSpelvormen, sorteerbaar, actief){
   const sub = (t)=>`<div style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.64rem;opacity:.85;line-height:1;margin-top:2px">${esc(t)}</div>`;
   const lEsc = String(l).replace(/'/g,"\\'").replace(/"/g,'&quot;');
   const klikAttr = sorteerbaar ? ` onclick="klsSorteerOpRonde('${lEsc}')" title="Sorteer op deze ronde"` : '';
-  const extraStyle = sorteerbaar ? `cursor:pointer;${actief?'background:var(--gp);':''}` : '';
-  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(l)}px;white-space:normal;line-height:1;${extraStyle}">${esc(l)}${actief?' <span style="color:var(--gd)">●</span>':''}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}</th>`;
+  const extraStyle = sorteerbaar ? `cursor:pointer;${actief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}` : '';
+  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(l)}px;white-space:normal;line-height:1;${extraStyle}">${esc(l)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}</th>`;
 }
 // Numerieke waarde van één ronde-cel voor een gegeven klassement-mode —
 // dezelfde onderliggende getallen als de cel()/totaal()-weergave in
@@ -4195,7 +4195,7 @@ async function tekenKlassementBody(toernooiId, mode){
       const r0 = rondes.find(r=>rondeLabel(r)===l);
       return klsKolomHeaderHtml(l, r0, toonSpelvormen, true, sortLabelActief===l);
     }).join('')}
-    <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'background:var(--gp);':''}">Totaal${!sortLabelActief?' <span style="color:var(--gd)">●</span>':''}</th>
+    <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
   ${rows.map((a,i)=>{
     const sp = allSpelers.find(s=>s.id===a.speler_id);
@@ -4269,7 +4269,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, liveLabels,
       const r0 = rondes.find(r=>rondeLabel(r)===l);
       return klsKolomHeaderHtml(l, r0, toonSpelvormen, true, sortLabelActief===l);
     }).join('')}
-    <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'background:var(--gp);':''}">Totaal${!sortLabelActief?' <span style="color:var(--gd)">●</span>':''}</th>
+    <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
   ${teamRows.map((tAgg,i)=>{
     const rb = i===0?'r1':i===1?'r2':i===2?'r3':'ro';
