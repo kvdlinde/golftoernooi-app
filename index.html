@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Rondje!</title>
@@ -21,6 +21,7 @@
   --sh: 0 4px 20px rgba(0,0,0,0.15); --shsm: 0 2px 8px rgba(0,0,0,0.08);
   --r: 6px; --rl: 12px;
   --hh: 56px; --nh: 62px;
+  --vvh: 100vh; --vvt: 0px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow-x:hidden}
@@ -132,6 +133,8 @@ tr:last-child td{border-bottom:none}
 .hstroke .dot{width:6px;height:6px;border-radius:50%;background:var(--gold)}
 .holerow input{width:44px;height:40px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:700;border:2px solid var(--cd);border-radius:var(--r);background:var(--cr);padding:0;-webkit-appearance:none}
 .holerow input:focus{outline:none;border-color:var(--gl);background:#fff}
+.holerow input.concept{border-style:dashed;border-color:var(--gold);background:#fff8e1;color:var(--td)}
+.holerow input.concept-afwijkend{border-style:dashed;border-color:var(--red);background:var(--redl);color:var(--red)}
 .hpts{font-family:'Inter',sans-serif;font-size:.68rem;font-weight:700;text-align:center;padding:4px 2px;border-radius:20px;background:var(--cd);color:var(--tm)}
 .pts-empty{background:transparent;color:var(--tl)}
 .pts-blob{background:var(--redl);color:var(--red)}
@@ -173,6 +176,12 @@ tr:last-child td{border-bottom:none}
 .sc-legende i.unval{border-style:dashed;border-color:var(--td);background:#fff}
 .sc-legende i.val{border-color:var(--gd);background:var(--gp)}
 .sc-legende i.mismatch{border-color:var(--red);background:var(--redl)}
+.sc-legende i.concept{border-style:dashed;border-color:var(--gold);background:#fff8e1}
+.sc-legende i.concept-afwijkend{border-style:dashed;border-color:var(--red);background:var(--redl)}
+.sc-subtot{border-top:2px solid var(--cd);margin-top:4px;padding-top:4px}
+.sc-flabel{font-family:'Inter',sans-serif;font-size:.66rem;font-weight:700;color:var(--tl);text-transform:uppercase;letter-spacing:.03em;display:flex;align-items:center;justify-content:flex-start;padding:3px 2px}
+.sc-fval{font-family:'IBM Plex Mono',monospace;font-size:.85rem;font-weight:700;color:var(--td);text-align:center;padding:3px 1px}
+.sc-fval.me{color:var(--gold)}
 .klikbaar{cursor:pointer}
 .sk table{font-family:'IBM Plex Mono',monospace}
 .sk th,.sk td{text-align:center;padding:6px 8px;white-space:nowrap;font-size:.72rem}
@@ -219,7 +228,11 @@ tr:last-child td{border-bottom:none}
 .sl2{font-size:.56rem;color:var(--tl);text-transform:uppercase;letter-spacing:.04em;font-family:'Inter',sans-serif;font-weight:600}
 
 /* MODAL */
-.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
+/* top/height volgen de ZICHTBARE viewport (--vvt/--vvh, bijgehouden via
+   window.visualViewport in syncModalViewport) i.p.v. 'inset:0' op de vaste
+   layout-viewport — anders schuift deze 'position:fixed'-laag (en de sticky
+   kolomkop van de scorekaart erin) mee omhoog zodra het toetsenbord opkomt. */
+.mo{display:none;position:fixed;left:0;right:0;top:var(--vvt,0px);height:var(--vvh,100vh);background:rgba(0,0,0,.55);z-index:300;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
 .mo.open{display:flex}
 .md{position:relative;background:var(--wh);border-radius:var(--rl) var(--rl) 0 0;padding:20px;width:100%;max-width:520px;box-shadow:var(--sh);max-height:88vh;overflow-y:auto}
 .md h3{font-family:'Playfair Display',serif;font-size:1.15rem;color:var(--gd);margin-bottom:14px;padding-right:30px}
@@ -318,7 +331,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.32.2';
+const APP_VERSION = '1.33.2';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -1039,6 +1052,25 @@ if(typeof document!=='undefined' && document.addEventListener){
 if(typeof window!=='undefined' && window.addEventListener){
   window.addEventListener('online', ()=>{ verwerkLiveUpdate(); heropenRealtime(); });
   setInterval(periodiekeVersverCheck, 60000);
+}
+// Houdt de modal-overlay (.mo, o.a. de scorekaart) gelijk aan de ZICHTBARE
+// viewport i.p.v. de layout-viewport, via de CSS-variabelen --vvh/--vvt.
+// Op mobiel (vooral iOS Safari) verandert de layout-viewport niet wanneer
+// het toetsenbord opkomt, maar de zichtbare viewport (visualViewport) wel —
+// zonder deze sync blijft '.mo' (position:fixed) op de volledige
+// layout-hoogte staan terwijl de pagina eronder omhoogschuift zodra een
+// invoerveld focus krijgt, en schuift de sticky kolomkop van de gedeelde
+// scorekaart (die zich binnen die modal bevindt) daarmee ongewenst mee omhoog.
+function syncModalViewport(){
+  const vv = window.visualViewport;
+  if(!vv || !document.documentElement || !document.documentElement.style) return;
+  document.documentElement.style.setProperty('--vvh', vv.height+'px');
+  document.documentElement.style.setProperty('--vvt', vv.offsetTop+'px');
+}
+if(typeof window!=='undefined' && window.visualViewport && window.visualViewport.addEventListener){
+  window.visualViewport.addEventListener('resize', syncModalViewport);
+  window.visualViewport.addEventListener('scroll', syncModalViewport);
+  syncModalViewport();
 }
 // Ververst de open gedeelde-scorekaart (indien open, niet-admin) zodra een
 // flight-genoot ergens een hole intikt — zo zie je elkaars invoer en de
@@ -3138,26 +3170,39 @@ async function openInvoerstatusModal(rondeId){
     const spelerIdsInRonde = new Set(flightSpelers.filter(fs=>rondeFlightIds.has(fs.flight_id)).map(fs=>fs.speler_id));
     deeln = deeln.filter(d=>spelerIdsInRonde.has(d.speler_id));
   }
-  let scores = [];
+  let scores = [], log = [];
   try{ scores = await sbG('scores','ronde_id=eq.'+rondeId) || []; }
   catch(e){ toast('Kon scores niet laden: '+e.message, true); }
+  // Invoerlog erbij: zo kan een speler die zelf nog niets heeft opgeslagen,
+  // maar van wie een medespeler alvast (een deel van) de kaart heeft
+  // ingetikt, apart herkend worden als 'concept' i.p.v. gewoon 'Nog niets' —
+  // scheelt de admin bij het afronden opnieuw alles moeten navragen.
+  try{ log = await sbG('score_holes_log','ronde_id=eq.'+rondeId) || []; }
+  catch(e){ log = []; }
   const rows = deeln.map(d=>{
     const sp = allSpelers.find(s=>s.id===d.speler_id);
     if(!sp) return null;
     const sc = scores.find(s=>s.speler_id===sp.id);
     const compleet = !!(sc && sc.stableford!=null);
     const aantal = sc && sc.hole_scores ? sc.hole_scores.filter(v=>v!=null).length : 0;
-    return {sp, compleet, aantal};
+    const conceptAantal = (aantal===0) ? new Set(log.filter(l=>l.speler_id===sp.id).map(l=>l.hole_index)).size : 0;
+    return {sp, compleet, aantal, conceptAantal};
   }).filter(Boolean).sort((a,b)=>a.sp.naam.localeCompare(b.sp.naam));
   const aantalCompleet = rows.filter(r=>r.compleet).length;
   openModalHtml('moInvoerstatus', `<h3>${esc(baan?baan.naam:ronde.naam)}${comb?' — '+esc(comb.naam):''}</h3>
     <p style="font-size:.8rem;color:var(--tm);font-family:'Inter',sans-serif;margin-bottom:10px">${aantalCompleet} van ${rows.length} kaart(en) compleet. Klik op een speler om de kaart te openen.</p>
     <div style="display:flex;flex-direction:column;gap:6px;max-height:58vh;overflow:auto">
-      ${rows.map(r=>`<div onclick="closeModal('moInvoerstatus');openScoreModal('${rondeId}','${r.sp.id}')"
-          style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;background:${r.compleet?'#e8f5e9':'var(--redl)'};font-family:'Inter',sans-serif;font-size:.88rem">
+      ${rows.map(r=>{
+        const heeftConcept = !r.compleet && r.aantal===0 && r.conceptAantal>0;
+        const bg = r.compleet ? '#e8f5e9' : heeftConcept ? '#fff3e0' : 'var(--redl)';
+        const kleur = r.compleet ? '#2e7d32' : heeftConcept ? '#e65100' : 'var(--red)';
+        const tekst = r.compleet ? '✓ Compleet' : heeftConcept ? (r.conceptAantal===18?'Concept compleet':'Concept: '+r.conceptAantal+'/18') : (r.aantal>0?r.aantal+'/18':'Nog niets');
+        return `<div onclick="closeModal('moInvoerstatus');openScoreModal('${rondeId}','${r.sp.id}')"
+          style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;background:${bg};font-family:'Inter',sans-serif;font-size:.88rem">
         <span>${esc(r.sp.naam)}</span>
-        <span style="font-weight:600;color:${r.compleet?'#2e7d32':'var(--red)'}">${r.compleet?'✓ Compleet':(r.aantal>0?r.aantal+'/18':'Nog niets')}</span>
-      </div>`).join('') || `<div class="empty">${gebruiktStartlijst?'Nog geen startlijst ingevoerd voor deze ronde.':'Geen deelnemers voor dit toernooi.'}</div>`}
+        <span style="font-weight:600;color:${kleur}">${tekst}</span>
+      </div>`;
+      }).join('') || `<div class="empty">${gebruiktStartlijst?'Nog geen startlijst ingevoerd voor deze ronde.':'Geen deelnemers voor dit toernooi.'}</div>`}
     </div>`);
 }
 // Volledige startlijst van een ronde, read-only — te openen door een deelnemer
@@ -3335,6 +3380,12 @@ async function renderScoreBody(spelerId){
     } else {
       ctx.kolomScores = existing?[existing]:[];
     }
+  } else {
+    // Admin: haal de invoerlog van déze speler op, zodat een nog niet
+    // opgeslagen kaart alvast voorgevuld kan worden met wat een medespeler
+    // voor hem/haar heeft ingetikt (zie holeGridHtml/admConceptWaarde) —
+    // scheelt bij het afronden opnieuw alles moeten navragen/intikken.
+    try{ ctx.log = await sbG('score_holes_log','ronde_id=eq.'+ctx.rondeId+'&speler_id=eq.'+spelerId) || []; }catch(e){ ctx.log = []; }
   }
 
   const body = document.getElementById('scBody');
@@ -3347,7 +3398,7 @@ async function renderScoreBody(spelerId){
     <div id="scNoTeeMsg" class="empty" style="${teeId?'display:none':''}">${ctx.readOnly?'Geen score ingevoerd voor deze ronde.':'Kies eerst een tee om te starten met scoren.'}</div>
     <div id="scEntryArea" style="${teeId?'':'display:none'}">
       ${(!isAdmin() && ctx.kolomSpelers.length>1)?`<div class="sc-legende"><span><i class="unval"></i> nog niet bevestigd</span><span><i class="val"></i> bevestigd door medespeler</span><span><i class="mismatch"></i> komt niet overeen</span></div>`:''}
-      <div id="scGrid">${isAdmin() ? holeGridHtml(ctx.holes, existing, ctx.readOnly) : scoreGridHtml(ctx)}</div>
+      <div id="scGrid">${isAdmin() ? holeGridHtml(ctx.holes, existing, ctx.readOnly, ctx.log, spelerId) : scoreGridHtml(ctx)}</div>
       <div class="ssumm" id="scSumm">
         <div class="si2"><div class="sv2" id="scBruto">—</div><div class="sl2">Bruto</div></div>
         <div class="si2"><div class="sv2" id="scNetto">—</div><div class="sl2">Netto</div></div>
@@ -3392,19 +3443,34 @@ async function resetScorekaart(){
     if(document.getElementById('panel-beheer-toernooien').classList.contains('active')) renderBeheerToernooienPanel();
   }catch(e){ toast('Resetten mislukt: '+e.message, true); }
 }
-function holeGridHtml(holes, existing, readOnly){
+function holeGridHtml(holes, existing, readOnly, log, spelerId){
   const vals = existing && existing.hole_scores ? existing.hole_scores : new Array(18).fill(null);
-  let rows='';
+  let rows='', anyConcept=false;
   for(let i=0;i<holes.length;i++){
     const h = holes[i];
-    const v = vals[i];
+    let v = vals[i];
+    let conceptCls = '';
+    // Nog geen officiële score voor deze hole? Kijk of een medespeler er al
+    // iets voor deze speler heeft ingetikt, en vul dat alvast in als concept
+    // (bewerkbaar, pas definitief zodra de admin op 'Score opslaan' drukt).
+    if(v==null && !readOnly && log && spelerId){
+      const concept = admConceptWaarde(log, spelerId, i);
+      if(concept.status!=='geen'){
+        v = concept.waarde;
+        conceptCls = concept.status==='afwijkend' ? ' concept-afwijkend' : ' concept';
+        anyConcept = true;
+      }
+    }
     rows += `<div class="holerow">
       <div class="hn">${i+1}</div>
       <div class="hp">par <b>${h.par}</b> · si ${h.si}</div>
       <div class="hstroke" id="hstroke${i}"></div>
-      <input type="number" min="1" max="12" id="h${i}" value="${v!=null?v:''}" ${readOnly?'disabled':''} oninput="scoreInputVeranderd(${i},${holes.length})">
+      <input type="number" min="1" max="12" id="h${i}" class="${conceptCls.trim()}" value="${v!=null?v:''}" ${readOnly?'disabled':''} oninput="scoreInputVeranderd(${i},${holes.length});this.classList.remove('concept','concept-afwijkend')">
       <div class="hpts pts-empty" id="pt${i}">—</div>
     </div>`;
+  }
+  if(anyConcept){
+    rows = `<div class="sc-legende"><span><i class="concept"></i> concept — alvast ingevuld door een medespeler, nog niet bevestigd</span><span><i class="concept-afwijkend"></i> medespelers zijn het niet eens — controleer</span></div>` + rows;
   }
   return rows;
 }
@@ -3556,6 +3622,19 @@ function scCelStatus(ctx, spelerId, holeIndex){
 function scCelClass(status){
   return status==='unvalidated' ? ' scc-unval' : status==='validated' ? ' scc-val' : status==='mismatch' ? ' scc-mismatch' : '';
 }
+// Concept-waarde voor de ADMIN-kaart: i.t.t. scCelStatus (dat de privacyregel
+// tussen medespelers onderling toepast) mag de admin altijd alle invoer in de
+// gedeelde log zien. Gebruikt om een hole die nog geen officiële score heeft
+// alvast voor te vullen met wat een medespeler er al voor deze speler heeft
+// ingetikt — zodat de admin bij het afronden niet alles opnieuw hoeft te
+// vragen/intikken als spelers onderling elkaars scores al hebben ingevoerd.
+function admConceptWaarde(log, spelerId, holeIndex){
+  const entries = (log||[]).filter(l=>l.speler_id===spelerId && l.hole_index===holeIndex);
+  if(!entries.length) return {waarde:null, status:'geen'};
+  const distinct = new Set(entries.map(e=>e.waarde));
+  const nieuwste = entries.slice().sort((a,b)=> new Date(b.updated_at||0) - new Date(a.updated_at||0))[0];
+  return {waarde: nieuwste.waarde, status: distinct.size===1 ? 'eens' : 'afwijkend'};
+}
 // hole_scores-array (lengte 18, zoals opgeslagen in 'scores') afgeleid uit de
 // huidige invoerlog voor één speler — altijd de OFFICIËLE waarde (uitsluitend
 // diens eigen invoer, nooit die van een medespeler), nooit de weergavewaarde.
@@ -3601,7 +3680,35 @@ function scoreGridHtml(ctx){
         <div class="scc-pt${scPtKlasse(punten)}" id="scpt_${ci}_${i}" ${status!=='empty'?`onclick="scToonInvoerDetails(${ci},${i})" style="cursor:pointer"`:''}>${punten!=null?punten+'pt':''}</div></div>`;
     });
   }
+  if(kolomSpelers.length>1) cells += scSubtotalenRijenHtml(ctx, kolomSpelers);
   return `<div class="sc-grid" style="grid-template-columns:28px repeat(${kolomSpelers.length},1fr)">${cells}</div>`;
+}
+// Subtotalen (Bruto/Netto/Stableford) van álle kolomspelers onderaan de
+// gedeelde scorekaart — dezelfde live 'tot nu toe'-optelling als de eigen
+// samenvattingstegels (scLiveTotalen), maar dan per medespeler, zodat je in
+// één oogopslag ziet hoe de rest van de flight ervoor staat zonder elke
+// kaart apart te hoeven bekijken. Gebruikt uitsluitend elks eigen officiële
+// invoer (scHoleScoresUitLog) — dezelfde privacyregel als de rest van de
+// gedeelde kaart.
+function scSubtotalenRijenHtml(ctx, kolomSpelers){
+  const rijen = [
+    {label:'Bruto', key:'bruto'},
+    {label:'Netto', key:'netto'},
+    {label:'Stableford', key:'stableford'},
+  ];
+  const perSpeler = kolomSpelers.map(id=>{
+    const holeScores = scHoleScoresUitLog(ctx, id);
+    const pH = scPlayingHcpVoor(ctx, id);
+    return scLiveTotalen(holeScores, ctx.holes, pH);
+  });
+  return rijen.map(({label,key},ri)=>{
+    let row = `<div class="sc-flabel${ri===0?' sc-subtot':''}">${label}</div>`;
+    kolomSpelers.forEach((id,ci)=>{
+      const v = perSpeler[ci][key];
+      row += `<div class="sc-fval${id===ctx.spelerId?' me':''}${ri===0?' sc-subtot':''}">${v!=null?v:'—'}</div>`;
+    });
+    return row;
+  }).join('');
 }
 // Toont in een klein modaltje wie welke waarde voor deze cel heeft ingevoerd —
 // zodat je bij een mismatch (rood) ter plekke kunt zien waar het verschil
