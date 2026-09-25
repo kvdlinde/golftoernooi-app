@@ -161,8 +161,16 @@ tr:last-child td{border-bottom:none}
 .sc-head, .sc-hdrcorner{position:sticky;top:0;z-index:2;background:var(--wh)}
 .sc-head{font-family:'Inter',sans-serif;font-size:.82rem;font-weight:700;color:var(--gd);text-align:center;padding:3px 1px 6px;border-bottom:2px solid var(--gd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-head.me{color:var(--gold);border-bottom-color:var(--gold)}
+/* Vinkje waarmee je kiest of je (ook) voor déze medespeler invoert — zie
+   scToggleMedespelerInvoer. Een niet-aangevinkte medespeler-kolom is gedimd
+   en niet-invoerbaar, alleen tijdens live invoer (niet meer in een gesloten/
+   read-only ronde — daar blijft alles gewoon zichtbaar). */
+.sc-head-dim{opacity:.5}
+.sc-medeinvoer{display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-weight:700}
+.sc-medeinvoer input[type="checkbox"]{width:13px;height:13px;margin:0;cursor:pointer;accent-color:var(--gold)}
 /* Score-invoer en stablefordpunten naast elkaar i.p.v. onder elkaar. */
 .scc-wrap{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px}
+.scc-wrap-dim{opacity:.4}
 .scc{width:38px;max-width:38px;height:38px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:1.25rem;font-weight:700;border:2px solid var(--cd);border-radius:6px;background:var(--cr);padding:0;-webkit-appearance:none;-moz-appearance:textfield;color:var(--td);flex-shrink:0}
 .scc::-webkit-inner-spin-button,.scc::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .scc:focus{outline:none;border-color:var(--gl);background:#fff}
@@ -354,7 +362,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.33.10';
+const APP_VERSION = '1.33.11';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -3743,12 +3751,59 @@ function scPuntenVoor(ctx, subjectId, holeIndex, waarde){
   return sfp(waarde, h.par, shots(pH, h.si));
 }
 function scPtKlasse(p){ return p==null ? '' : ' pt-'+Math.min(p,4); }
+// Sleutel waaronder we (per ronde + speler) onthouden voor welke ÉÉN
+// medespeler je, naast jezelf, ook scores invoert op de gedeelde scorekaart
+// — zie scToggleMedespelerInvoer. Nooit gedeeld tussen rondes of spelers.
+function scActieveMedespelerKey(ctx){ return 'scMedeInvoer_'+ctx.rondeId+'_'+ctx.spelerId; }
+// Welke kolomindex (binnen ctx.kolomSpelers) momenteel is aangevinkt om ook
+// voor in te voeren — null als niemand is aangevinkt (dan voer je alleen je
+// eigen score in). Kolom 0 (jijzelf) kan hier nooit uitkomen: die is altijd
+// al actief en heeft geen vinkje nodig.
+function scActieveMedespelerKolom(ctx){
+  let raw;
+  try{ raw = localStorage.getItem(scActieveMedespelerKey(ctx)); }catch(e){ return null; }
+  if(raw==null) return null;
+  const idx = parseInt(raw,10);
+  const n = (ctx.kolomSpelers||[]).length;
+  return (!isNaN(idx) && idx>0 && idx<n) ? idx : null;
+}
+// Aan/uitvinken van "ook invoeren voor deze medespeler" op de gedeelde
+// scorekaart. Er wordt maar één kolomindex onthouden, dus een nieuwe
+// medespeler aanvinken vervangt vanzelf een eerder aangevinkte — precies
+// de bedoeling bij een vierbal: jezelf, plus hooguit één ander tegelijk.
+function scToggleMedespelerInvoer(ci){
+  const ctx = window._scCtx;
+  if(!ctx) return;
+  const key = scActieveMedespelerKey(ctx);
+  try{
+    if(scActieveMedespelerKolom(ctx)===ci) localStorage.removeItem(key);
+    else localStorage.setItem(key, String(ci));
+  }catch(e){ /* localStorage niet beschikbaar (bv. privénavigatie) — vinkje werkt dan alleen voor deze render */ }
+  const grid = document.getElementById('scGrid');
+  if(grid) grid.innerHTML = scoreGridHtml(ctx);
+}
+// Kolomindexen die nu daadwerkelijk invoerbaar zijn: altijd je eigen kolom
+// (0), plus de eventueel aangevinkte medespeler-kolom — in die volgorde,
+// want dat bepaalt ook de spring-volgorde na een invoer (zie
+// naarVolgendeGridHole hieronder).
+function scActieveKolommen(ctx){
+  const gekozen = scActieveMedespelerKolom(ctx);
+  return gekozen!=null ? [0, gekozen] : [0];
+}
 function scoreGridHtml(ctx){
   const kolomSpelers = ctx.kolomSpelers || [ctx.spelerId];
   const namen = kolomSpelers.map(id=>{ const sp = allSpelers.find(s=>s.id===id); return sp?sp.naam:'?'; });
+  const actieveKolommen = scActieveKolommen(ctx);
   let cells = '<div class="sc-hcell sc-hdrcorner"></div>';
   kolomSpelers.forEach((id,ci)=>{
-    cells += `<div class="sc-head${id===ctx.spelerId?' me':''}">${esc((namen[ci]||'?').split(' ')[0])}</div>`;
+    if(id===ctx.spelerId){
+      cells += `<div class="sc-head me">${esc((namen[ci]||'?').split(' ')[0])}</div>`;
+      return;
+    }
+    // Alleen tijdens live invoer dimmen/uitschakelen; in een gesloten/
+    // read-only ronde blijft de hele kaart gewoon volledig zichtbaar.
+    const gedimd = !actieveKolommen.includes(ci) && !ctx.readOnly;
+    cells += `<div class="sc-head${gedimd?' sc-head-dim':''}"><label class="sc-medeinvoer" title="Ook scores voor ${esc(namen[ci]||'?')} invoeren"><input type="checkbox" ${actieveKolommen.includes(ci)?'checked':''} ${ctx.readOnly?'disabled':''} onchange="scToggleMedespelerInvoer(${ci})">${esc((namen[ci]||'?').split(' ')[0])}</label></div>`;
   });
   for(let i=0;i<ctx.holes.length;i++){
     const h = ctx.holes[i];
@@ -3757,8 +3812,10 @@ function scoreGridHtml(ctx){
     kolomSpelers.forEach((id,ci)=>{
       const {status, waarde} = scCelStatus(ctx, id, i);
       const punten = scPuntenVoor(ctx, id, i, waarde);
-      cells += `<div class="scc-wrap"><input type="number" min="1" max="12" inputmode="numeric" class="scc${scCelClass(status)}" id="scc_${ci}_${i}"
-        value="${waarde!=null?waarde:''}" placeholder="–" ${ctx.readOnly?'disabled':''}
+      const kanTypen = actieveKolommen.includes(ci);
+      const gedimd = !kanTypen && !ctx.readOnly;
+      cells += `<div class="scc-wrap${gedimd?' scc-wrap-dim':''}"><input type="number" min="1" max="12" inputmode="numeric" class="scc${scCelClass(status)}" id="scc_${ci}_${i}"
+        value="${waarde!=null?waarde:''}" placeholder="–" ${(ctx.readOnly||!kanTypen)?'disabled':''}
         oninput="scGridInputVeranderd(${ci},${i},${ctx.holes.length})" onblur="scGridBlur(${ci},${i})">
         <div class="scc-pt${scPtKlasse(punten)}" id="scpt_${ci}_${i}" ${status!=='empty'?`onclick="scToonInvoerDetails(${ci},${i})" style="cursor:pointer"`:''}>${punten!=null?punten+'pt':''}</div></div>`;
     });
@@ -3980,18 +4037,22 @@ function scGridHerrenderCel(subjectId, holeIndex){
     }
   }
 }
-// Springt na een geldige invoer eerst naar RECHTS (de volgende speler op
-// dezelfde hole) — pas na de laatste kolom springt hij naar beneden, naar de
-// eerste kolom van de volgende hole. Zo tik je een hele hole-rij achter
-// elkaar in (voor jezelf én je flight-genoten) voordat je verder gaat.
+// Springt na een geldige invoer naar de volgende ACTIEVE kolom op dezelfde
+// hole (scActieveKolommen): standaard alleen jouw eigen kolom, dus dan
+// spring je gewoon naar beneden, naar jouw kolom van de volgende hole. Heb
+// je (via het vinkje) ook één medespeler geselecteerd, dan spring je eerst
+// naar RECHTS naar diens kolom, en pas daarna naar beneden naar jouw kolom
+// van de volgende hole. Zo tik je per hole eerst je eigen score in, en
+// optioneel meteen die van de ene medespeler voor wie je ook invoert.
 function naarVolgendeGridHole(ci, i, aantalHoles){
   const ctx = window._scCtx;
-  const aantalKolommen = (ctx&&ctx.kolomSpelers) ? ctx.kolomSpelers.length : 1;
-  if(ci+1<aantalKolommen){
-    const next = document.getElementById('scc_'+(ci+1)+'_'+i);
+  const kolommen = scActieveKolommen(ctx);
+  const pos = kolommen.indexOf(ci);
+  if(pos>=0 && pos+1<kolommen.length){
+    const next = document.getElementById('scc_'+kolommen[pos+1]+'_'+i);
     if(next){ next.focus(); if(next.select) next.select(); }
   } else if(i+1<aantalHoles){
-    const next = document.getElementById('scc_0_'+(i+1));
+    const next = document.getElementById('scc_'+kolommen[0]+'_'+(i+1));
     if(next){ next.focus(); if(next.select) next.select(); }
   } else {
     const btn = document.getElementById('scOpslaanBtn');
