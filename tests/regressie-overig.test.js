@@ -5,7 +5,9 @@
 // ingelogdAdmin, enzovoort) — precies zoals ze los ook al werkten.
 //
 // Secties:
-//   1. Klassement-sortering op ronde (klsSorteerOpRonde/klsSorteerOpTotaal)
+//   1. Klassement-sortering op ronde (klsSorteerOpRonde/klsSorteerOpTotaal) +
+//      rondeLabel vs. rondeLabelKey (gelijknamige rondes mogen niet vanzelf
+//      samenvoegen; een gedeeld rapportagelabel moet dat nog steeds wél doen)
 //   2. Realtime-herstel (visibilitychange/online/periodieke vangnet-check)
 //   3. Modal-sluitkruisje (openModalHtml)
 //   4. Startlijst-sortering op starttijd (flightsOpStarttijd)
@@ -92,24 +94,38 @@ async function main(){
       while((m = re.exec(klsBody.innerHTML))){ namen.push(m[1]); }
       return namen;
     }
+    // De sorteersleutel achter een kolomkop is sinds de rondeLabel/rondeLabelKey-
+    // fix niet meer per se gelijk aan de zichtbare kolomtekst (bv. 'Apremont')
+    // — zonder expliciet rapportagelabel is de sleutel intern ('_ronde:<id>').
+    // Dus net als een echte klik: de sleutel uit de gerenderde onclick-attribute
+    // van de kolomkop halen i.p.v. de naam zelf te gokken.
+    function sleutelVoorKolom(zichtbareTekst){
+      const re = /<th class="rk" onclick="klsSorteerOpRonde\('([^']*)'\)"[^>]*>([^<]*)/g;
+      let m;
+      while((m = re.exec(klsBody.innerHTML))){
+        if(m[2]===zichtbareTekst) return m[1];
+      }
+      throw new Error('Geen kolomkop gevonden met tekst: '+zichtbareTekst);
+    }
 
     await vm.runInContext(`tekenKlassementBody('t1','stableford')`, sandbox);
     let volgorde = volgordeUitTable();
     assert.strictEqual(volgorde[0], 'Kay van de Linde', 'zonder ronde-sortering wint p1 op totaal');
     assert.ok(klsBody.innerHTML.includes('Totaal') && klsBody.innerHTML.includes('box-shadow:inset 0 -3px 0 var(--gold)'), 'Totaal-kop moet als actieve sortering gemarkeerd zijn (gouden onderstreping)');
 
-    vm.runInContext(`klsSorteerOpRonde('Apremont')`, sandbox);
+    const apremontKey = sleutelVoorKolom('Apremont');
+    vm.runInContext(`klsSorteerOpRonde(${JSON.stringify(apremontKey)})`, sandbox);
     await new Promise(r=>setTimeout(r,10));
     volgorde = volgordeUitTable();
     assert.strictEqual(volgorde[0], 'Richard Dirne', 'gesorteerd op Apremont moet p2 (30 pt) bovenaan staan, ondanks lager totaal');
     assert.strictEqual(volgorde[volgorde.length-1], 'Sierk Roosma', 'wie deze ronde niet speelde moet onderaan zakken');
 
-    vm.runInContext(`klsSorteerOpRonde('Apremont')`, sandbox);
+    vm.runInContext(`klsSorteerOpRonde(${JSON.stringify(apremontKey)})`, sandbox);
     await new Promise(r=>setTimeout(r,10));
     volgorde = volgordeUitTable();
     assert.strictEqual(volgorde[0], 'Kay van de Linde', 'nogmaals klikken op dezelfde ronde moet terug naar het totaal gaan');
 
-    vm.runInContext(`klsSorteerOpRonde('Apremont')`, sandbox);
+    vm.runInContext(`klsSorteerOpRonde(${JSON.stringify(apremontKey)})`, sandbox);
     await new Promise(r=>setTimeout(r,10));
     vm.runInContext(`tekenKlassementBody('t1','birdie-bruto')`, sandbox);
     await new Promise(r=>setTimeout(r,10));
@@ -118,7 +134,47 @@ async function main(){
     vm.runInContext(`klsSorteerOpTotaal()`, sandbox);
     await new Promise(r=>setTimeout(r,10));
 
-    console.log('[1/9] Klassement-sortering op ronde: OK');
+    // --- Kay's gerapporteerde bug: twee losse rondes die toevallig dezelfde
+    // naam hebben ('Waterloo', op verschillende dagen/lussen, geen
+    // rapportagelabel ingevuld) mogen NOOIT automatisch samengevoegd worden
+    // tot één klassementkolom — dat is uitsluitend voorbehouden aan een
+    // expliciet, gelijk rapportagelabel (zie hieronder).
+    vm.runInContext(`
+      allRondes = [
+        {id:'r10', toernooi_id:'t1', naam:'Waterloo', volgorde:1, status:'gesloten', combinatie_id:null},
+        {id:'r11', toernooi_id:'t1', naam:'Waterloo', volgorde:2, status:'gesloten', combinatie_id:null},
+      ];
+    `, sandbox);
+    fakeScores = [
+      {id:'s10', ronde_id:'r10', speler_id:'p1', stableford:20, bruto:85, netto:75, birdies_bruto:0, eagles_bruto:0, hole_scores:Array(18).fill(4), playing_hcp:10},
+      {id:'s11', ronde_id:'r11', speler_id:'p1', stableford:16, bruto:88, netto:78, birdies_bruto:0, eagles_bruto:0, hole_scores:Array(18).fill(4), playing_hcp:10},
+    ];
+    await vm.runInContext(`tekenKlassementBody('t1','stableford')`, sandbox);
+    const waterlooKoppen = (klsBody.innerHTML.match(/<th class="rk"[^>]*>Waterloo/g)||[]).length;
+    assert.strictEqual(waterlooKoppen, 2, 'twee losstaande, gelijknamige Waterloo-rondes zonder rapportagelabel moeten allebei hun eigen kolom houden, niet automatisch samengevoegd worden');
+    assert.strictEqual(klsBody.innerHTML.match(/<td style="text-align:center"><b style="color:var\(--gd\)">(\d+)</)[1], '36', 'het totaal moet gewoon de som van de twee losse rondes blijven (20+16), niet uit één samengevoegde kolom komen');
+
+    // --- Diezelfde twee rondes mét eenzelfde, expliciet ingevuld rapportagelabel
+    // moeten wél samen als één kolom getoond worden — dat is de bedoelde,
+    // opzettelijke samenvoeg-functionaliteit, en die mag niet kapotgaan.
+    vm.runInContext(`
+      allRondes = [
+        {id:'r20', toernooi_id:'t1', naam:'Ochtendflight', rapportage_label:'American', volgorde:1, status:'gesloten', combinatie_id:null},
+        {id:'r21', toernooi_id:'t1', naam:'Middagflight', rapportage_label:'American', volgorde:2, status:'gesloten', combinatie_id:null},
+      ];
+    `, sandbox);
+    fakeScores = [
+      {id:'s20', ronde_id:'r20', speler_id:'p1', stableford:18, bruto:86, netto:76, birdies_bruto:0, eagles_bruto:0, hole_scores:Array(18).fill(4), playing_hcp:10},
+      {id:'s21', ronde_id:'r21', speler_id:'p1', stableford:14, bruto:89, netto:79, birdies_bruto:0, eagles_bruto:0, hole_scores:Array(18).fill(4), playing_hcp:10},
+    ];
+    await vm.runInContext(`tekenKlassementBody('t1','stableford')`, sandbox);
+    const americanKoppen = (klsBody.innerHTML.match(/<th class="rk"[^>]*>American/g)||[]).length;
+    assert.strictEqual(americanKoppen, 1, 'twee rondes met hetzelfde expliciete rapportagelabel moeten samen één klassementkolom vormen');
+    const popupMatch = klsBody.innerHTML.match(/onclick='openScorekaartPopup\(([^)]*)\)'/);
+    assert.ok(popupMatch && popupMatch[1].includes('s20') && popupMatch[1].includes('s21'), 'de samengevoegde kolom moet de scoreIds van beide rondes bevatten (klikbaar naar allebei de kaarten)');
+    assert.strictEqual(klsBody.innerHTML.match(/<td style="text-align:center"><b style="color:var\(--gd\)">(\d+)</)[1], '32', 'het totaal van de samengevoegde American-kolom moet de som van beide rondes zijn (18+14)');
+
+    console.log('[1/9] Klassement-sortering op ronde + rondeLabel/rondeLabelKey: OK');
   })();
 
   // ===================== 2. Realtime-herstel =====================
