@@ -13,6 +13,7 @@
 //   6. Pinch-zoom + modal-viewport-sync (syncModalViewport/--vvh/--vvt)
 //   7. Modal max-height volgt het toetsenbord (--vvh) i.p.v. een vaste 88vh
 //   8. Scorekaart-popup: bruto-scorekleuren (skGrossKlasse)
+//   9. Funnie-knop op de gedeelde scorekaart (extraPrijzenVoorHole/openHoleFunnieModal)
 const vm = require('vm');
 const fs = require('fs');
 const path = require('path');
@@ -117,7 +118,7 @@ async function main(){
     vm.runInContext(`klsSorteerOpTotaal()`, sandbox);
     await new Promise(r=>setTimeout(r,10));
 
-    console.log('[1/8] Klassement-sortering op ronde: OK');
+    console.log('[1/9] Klassement-sortering op ronde: OK');
   })();
 
   // ===================== 2. Realtime-herstel =====================
@@ -219,7 +220,7 @@ async function main(){
     assert.strictEqual(sandbox.__openToernooiDetailCalls, 1, 'open toernooi-detailscherm moet meeliften met de periodieke check');
     assert.strictEqual(intervalMs, 60000, 'de vangnet-check moet elk 60s lopen');
 
-    console.log('[2/8] Realtime-herstel (visibilitychange/online/periodieke check): OK');
+    console.log('[2/9] Realtime-herstel (visibilitychange/online/periodieke check): OK');
   })();
 
   // ===================== 3. Modal-sluitkruisje =====================
@@ -263,7 +264,7 @@ async function main(){
     const titelIdx = modal.innerHTML.indexOf('<h3>Test</h3>');
     assert.ok(closeIdx>=0 && closeIdx < titelIdx, 'het kruisje moet vóór de modal-inhoud in de DOM staan');
 
-    console.log('[3/8] Modal-sluitkruisje aanwezig, correct en klikbaar: OK');
+    console.log('[3/9] Modal-sluitkruisje aanwezig, correct en klikbaar: OK');
   })();
 
   // ===================== 4. Startlijst-sortering op starttijd =====================
@@ -307,7 +308,7 @@ async function main(){
     const g3 = vm.runInContext('flightsOpStarttijd(__flights3)', sandbox);
     assert.strictEqual(g3[0].id, 'f2', '9:05 moet vóór 10:00 komen (numerieke vergelijking, geen tekstvergelijking)');
 
-    console.log('[4/8] Startlijst-sortering op starttijd (niet op opslagvolgorde): OK');
+    console.log('[4/9] Startlijst-sortering op starttijd (niet op opslagvolgorde): OK');
   })();
 
   // ===================== 5. Admin-conceptscores =====================
@@ -401,7 +402,7 @@ async function main(){
     assert.strictEqual(sandbox.teksten[1], 'Concept: 10/18', 'p2 heeft alleen conceptdata -> amber badge i.p.v. rode "Nog niets"');
     assert.strictEqual(sandbox.teksten[2], 'Nog niets', 'p3 heeft geen scores en geen log -> blijft "Nog niets"');
 
-    console.log('[5/8] Admin-conceptscores (prefill + invoerstatus-badge): OK');
+    console.log('[5/9] Admin-conceptscores (prefill + invoerstatus-badge): OK');
   })();
 
   // ===================== 6. Pinch-zoom + modal-viewport-sync =====================
@@ -447,7 +448,7 @@ async function main(){
     assert.strictEqual(setProps['--vvh'], '300px', 'bij het opkomen van het toetsenbord moet --vvh meekrimpen');
     assert.strictEqual(setProps['--vvt'], '0px', '--vvt moet meebewegen met offsetTop');
 
-    console.log('[6/8] Pinch-zoom weer mogelijk + modal volgt --vvh/--vvt: OK');
+    console.log('[6/9] Pinch-zoom weer mogelijk + modal volgt --vvh/--vvt: OK');
   })();
 
   // ===================== 7. Modal max-height volgt het toetsenbord =====================
@@ -462,7 +463,7 @@ async function main(){
     assert.ok(landscapeMatch, 'landscape #moScorekaart .md-override moet bestaan');
     assert.ok(landscapeMatch[0].includes('var(--vvh'), 'landscape #moScorekaart .md max-height moet ook var(--vvh...) gebruiken');
 
-    console.log('[7/8] Modal max-height (alle modals, incl. Startlijst) volgt --vvh i.p.v. vaste 88vh: OK');
+    console.log('[7/9] Modal max-height (alle modals, incl. Startlijst) volgt --vvh i.p.v. vaste 88vh: OK');
   })();
 
   // ===================== 8. Scorekaart-popup: bruto-scorekleuren =====================
@@ -509,7 +510,94 @@ async function main(){
     });
     assert.ok(!/function ptsClass\(/.test(html), 'ptsClass (stableford-gebaseerd) hoort hier niet meer te bestaan');
 
-    console.log('[8/8] Scorekaart-popup kleurt de Score-rij op bruto slagen (eagle/birdie/par/bogey/meer dan bogey): OK');
+    console.log('[8/9] Scorekaart-popup kleurt de Score-rij op bruto slagen (eagle/birdie/par/bogey/meer dan bogey): OK');
+  })();
+
+  // ===================== 9. Funnie-knop op de gedeelde scorekaart =====================
+  await (async function(){
+    function makeElements(){
+      const elements = {};
+      function makeEl(id){
+        const el = {
+          _id: id, innerHTML:'', value:'', textContent:'', className:'',
+          classList: { _set:new Set(), add(c){this._set.add(c);}, remove(c){this._set.delete(c);}, contains(c){return this._set.has(c);} },
+          appendChild(){}, remove(){}, onclick:null,
+          get id(){ return this._id; }, set id(v){ this._id=v; elements[v]=this; },
+        };
+        if(id!=null) elements[id]=el;
+        return el;
+      }
+      return {elements, makeEl};
+    }
+    const {elements, makeEl} = makeElements();
+    ['modals','scGrid','tc'].forEach(makeEl);
+    const documentStub = {
+      getElementById(id){ return elements[id] || null; },
+      createElement(){ return makeEl(null); },
+    };
+    let patchBody = null;
+    const fakeFetch = async(url, opts)=>{
+      if(opts && opts.method==='PATCH') patchBody = JSON.parse(opts.body);
+      return { ok:true, status:200, text: async()=>'[]' };
+    };
+    const sandbox = {
+      console, document: documentStub, window: {}, fetch: fakeFetch,
+      crypto: { getRandomValues(arr){ for(let i=0;i<arr.length;i++) arr[i]=0; }, subtle:{} },
+      setTimeout, clearTimeout, Promise, URLSearchParams,
+      Set, Array, Math, Date, JSON, parseInt, parseFloat, isNaN, String, Number, Object,
+    };
+    sandbox.window = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(src, sandbox, {filename:'index.html<script>'});
+
+    vm.runInContext(`
+      allRondes = [{id:'r1', toernooi_id:'t1', naam:'Waterloo'}];
+      allDeelnemers = [
+        {id:'d1', toernooi_id:'t1', speler_id:'p1', status:'bevestigd'},
+        {id:'d2', toernooi_id:'t1', speler_id:'p2', status:'bevestigd'},
+      ];
+      allSpelers = [{id:'p1', naam:'Kay van de Linde'}, {id:'p2', naam:'Hans Stroeve'}];
+      allExtraPrijzen = [
+        {id:'ep1', ronde_id:'r1', type:'Neary', hole:13, categorie:'heren_dames', winnaar_speler_id:null},
+        {id:'ep2', ronde_id:'r1', type:'Leary', hole:13, categorie:'dames', winnaar_speler_id:'p1'},
+      ];
+    `, sandbox);
+
+    // 1. extraPrijzenVoorHole filtert op ronde + holenummer.
+    const holeMet = vm.runInContext(`extraPrijzenVoorHole('r1', 13)`, sandbox);
+    assert.strictEqual(holeMet.length, 2, 'hole 13 heeft twee funnies (Neary + Leary)');
+    const holeZonder = vm.runInContext(`extraPrijzenVoorHole('r1', 7)`, sandbox);
+    assert.strictEqual(holeZonder.length, 0, 'hole 7 heeft geen funnies');
+
+    // 2. scoreGridHtml markeert alleen de hole-rij mét funny als oranje knop.
+    const ctx = {
+      rondeId: 'r1', spelerId: 'p1', kolomSpelers: ['p1'], readOnly: false,
+      holes: Array.from({length:18},(_,i)=>({par:4, si:i+1})),
+      log: [], kolomScores: [],
+    };
+    sandbox.window._scCtx = ctx;
+    const gridHtml = vm.runInContext('scoreGridHtml(window._scCtx)', sandbox);
+    assert.ok(gridHtml.includes(`sc-hcell-funny" onclick="openHoleFunnieModal('r1',13)"`), 'hole 13 moet de oranje funnie-knop krijgen');
+    assert.ok(!gridHtml.includes(`openHoleFunnieModal('r1',7)`), 'hole 7 (zonder funny) mag geen knop krijgen');
+
+    // 3. CSS: .sc-hcell-funny bestaat en is oranje.
+    assert.ok(/\.sc-hcell\.sc-hcell-funny\{[^}]*background:#fff3e0/.test(html), '.sc-hcell-funny moet een oranje achtergrond hebben');
+
+    // 4. openHoleFunnieModal rendert een select per funny op die hole, met de
+    //    huidige winnaar (indien bekend) al geselecteerd.
+    vm.runInContext(`openHoleFunnieModal('r1', 13)`, sandbox);
+    const modalHtml = elements['moHoleFunnie'] ? elements['moHoleFunnie'].innerHTML : '';
+    assert.ok(modalHtml.includes('Neary') && modalHtml.includes('Leary'), 'modal moet beide funnies op hole 13 tonen');
+    assert.ok(/<option value="p1"[^>]*selected/.test(modalHtml), 'Leary op hole 13 heeft Kay al als winnaar geselecteerd staan');
+
+    // 5. Winnaar kiezen vanuit de kaart slaat op via dezelfde tabel/route als
+    //    het bestaande Admin-scherm, en herbouwt de scorekaart + modal.
+    await vm.runInContext(`wijzigExtraPrijsWinnaarVanuitKaart('ep1', 'p2', 'r1', 13)`, sandbox);
+    assert.deepStrictEqual(patchBody, {winnaar_speler_id:'p2'}, 'winnaar kiezen vanuit de kaart moet dezelfde PATCH doen als het Admin-scherm');
+    const epNa = vm.runInContext(`allExtraPrijzen.find(p=>p.id==='ep1')`, sandbox);
+    assert.strictEqual(epNa.winnaar_speler_id, 'p2', 'lokale state moet meteen bijgewerkt zijn');
+
+    console.log('[9/9] Funnie-knop op de gedeelde scorekaart (oranje hole-info, winnaar rechtstreeks vanaf de kaart instelbaar): OK');
   })();
 
   console.log('ALLE OVERIGE REGRESSIETESTS GESLAAGD');
