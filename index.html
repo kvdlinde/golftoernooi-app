@@ -147,6 +147,12 @@ tr:last-child td{border-bottom:none}
 .sc-hcell{font-family:'IBM Plex Mono',monospace;color:var(--tl);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 1px;text-align:center;line-height:1.25}
 .sc-hcell .sc-hnr{font-size:.74rem;font-weight:700;color:var(--td)}
 .sc-hcell .sc-hsub{font-size:.58rem;color:var(--tl)}
+/* Hole-info wordt een knop zodra er een Neary/Leary/Longest ("funnie") op die
+   hole zit — oranje, klikbaar, opent de winnaar-keuze voor die hole zonder
+   naar het aparte Funnies-scherm te hoeven (op verzoek ook voor spelers zelf
+   bruikbaar, niet alleen de Admin — zie openHoleFunnieModal). */
+.sc-hcell.sc-hcell-funny{background:#fff3e0;border-radius:6px;cursor:pointer}
+.sc-hcell.sc-hcell-funny .sc-hnr,.sc-hcell.sc-hcell-funny .sc-hsub{color:#e65100}
 /* Namenrij (headers) blijft zichtbaar tijdens het scrollen door de 18 holes —
    sticky t.o.v. de scrollende modal (.md, zie CSS verderop), met een eigen
    ondoorzichtige achtergrond zodat de holes die eronderdoor scrollen niet
@@ -348,7 +354,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.33.6';
+const APP_VERSION = '1.33.7';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -1734,12 +1740,12 @@ function renderBeheerToernooienPanel(){
             <div><div class="rd" style="font-size:.95rem">${esc(r.naam)}${r.rapportage_label?` <span class="hb">${esc(r.rapportage_label)}</span>`:''}</div><div class="rm">${fDatum(r.datum)} · ${combinatieLabel(comb)} ${gesloten?`<button class="btn bg" style="padding:5px 11px;border-radius:20px;font-size:.78rem;font-weight:600" onclick="heropenRonde('${r.id}')">Heropenen</button>`:statusBadge(r.status)}</div></div>
           </div>
           ${gesloten ? '' : `<div class="ra">
-            <button class="btn bg bsm" onclick="openRondeModal('${t.id}','${r.id}')">Bewerken</button>
             <button class="btn bpu bsm" onclick="openStartlijstModal('${r.id}')">Startlijst</button>
-            <button class="btn bgo bsm" onclick="sluitRonde('${r.id}')">Ronde sluiten &amp; uitslag tonen</button>
             <button class="btn bbl bsm" onclick="openInvoerstatusModal('${r.id}')">Score invoeren</button>
             <button class="btn bpu bsm" onclick="openExtraPrijzenModal('${r.id}')">Funnies${extraPrijzenVoorRonde(r.id).length?` (${extraPrijzenVoorRonde(r.id).length})`:''}</button>
             ${teams.length?`<button class="btn bpu bsm" onclick="openTeamRondeModal('${r.id}')">Teams (ronde)</button>`:''}
+            <button class="btn bg bsm" onclick="openRondeModal('${t.id}','${r.id}')">Bewerken</button>
+            <button class="btn bgo bsm" onclick="sluitRonde('${r.id}')">Ronde sluiten</button>
             <button class="btn bd bsm" onclick="verwijderRonde('${r.id}')">×</button>
           </div>`}
           </div>`;
@@ -1836,6 +1842,43 @@ async function wijzigExtraPrijsWinnaar(id, spelerId){
     const p = allExtraPrijzen.find(x=>x.id===id); if(p) p.winnaar_speler_id = spelerId||null;
     toast('Winnaar opgeslagen');
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
+}
+// Funnie(s) op één specifieke hole van een ronde — gebruikt door de oranje
+// hole-knop op de gedeelde scorekaart (zie scoreGridHtml/openHoleFunnieModal).
+// Eén hole kan meerdere funnies hebben (bv. Neary heren én dames).
+function extraPrijzenVoorHole(rondeId, holeNr){
+  return extraPrijzenVoorRonde(rondeId).filter(p=>p.hole===holeNr);
+}
+// Winnaar van een funnie rechtstreeks vanaf de scorekaart kunnen invullen —
+// op expliciet verzoek ook voor spelers zelf, niet meer uitsluitend via het
+// Admin-scherm "Toernooien beheer → ronde → Funnies". Zelfde onderliggende
+// opslag (wijzigExtraPrijsWinnaar) en dezelfde tabel, dus blijft ook zichtbaar
+// en bewerkbaar in dat Admin-scherm.
+function openHoleFunnieModal(rondeId, holeNr){
+  const ronde = rondeById(rondeId);
+  const deeln = allDeelnemers.filter(d=>d.toernooi_id===ronde.toernooi_id);
+  const lijst = extraPrijzenVoorHole(rondeId, holeNr);
+  if(!lijst.length) return;
+  openModalHtml('moHoleFunnie', `<h3>Funnie${lijst.length>1?'s':''} — hole ${holeNr}</h3>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${lijst.map(p=>`
+        <div class="fg"><label>${esc(p.type)} · ${esc(extraPrijsCatLabel(p.categorie))}</label>
+          <select onchange="wijzigExtraPrijsWinnaarVanuitKaart('${p.id}', this.value, '${rondeId}', ${holeNr})">
+            <option value="">— nog geen winnaar —</option>
+            ${deeln.map(d=>{ const sp=allSpelers.find(s=>s.id===d.speler_id); return sp?`<option value="${sp.id}" ${p.winnaar_speler_id===sp.id?'selected':''}>${esc(sp.naam)}</option>`:''; }).join('')}
+          </select>
+        </div>`).join('')}
+    </div>
+    <button class="btn bg bf" style="margin-top:14px" onclick="closeModal('moHoleFunnie')">Sluiten</button>`);
+}
+async function wijzigExtraPrijsWinnaarVanuitKaart(id, spelerId, rondeId, holeNr){
+  await wijzigExtraPrijsWinnaar(id, spelerId);
+  const ctx = window._scCtx;
+  if(ctx){
+    const grid = document.getElementById('scGrid');
+    if(grid) grid.innerHTML = isAdmin() ? holeGridHtml(ctx.holes, ctx.existingScore, ctx.readOnly, ctx.log, ctx.spelerId) : scoreGridHtml(ctx);
+  }
+  openHoleFunnieModal(rondeId, holeNr);
 }
 // Uitslagen op de Klassement-pagina, als eigen subtab "Funnies".
 // 'rondes' is dezelfde lijst als de rest van het klassement gebruikt: voor spelers
@@ -3419,7 +3462,7 @@ async function renderScoreBody(spelerId){
       <div class="ssumm" id="scSumm">
         <div class="si2"><div class="sv2" id="scBruto">—</div><div class="sl2">Bruto</div></div>
         <div class="si2"><div class="sv2" id="scNetto">—</div><div class="sl2">Netto</div></div>
-        <div class="si2"><div class="sv2" id="scStbl">—</div><div class="sl2">Stableford</div></div>
+        <div class="si2"><div class="sv2" id="scStbl">—</div><div class="sl2">STB</div></div>
       </div>
       ${ctx.readOnly?'':(isAdmin()?'<button class="btn bp bf" id="scOpslaanBtn" style="margin-top:12px" onclick="slaScoreOp()">Score opslaan</button>':'<button class="btn bp bf" id="scOpslaanBtn" style="margin-top:12px" onclick="closeModal(\'moScore\')">Klaar</button>')}
       ${(isAdmin() && ctx.existingScore)?'<button class="btn bd bf" style="margin-top:8px" onclick="resetScorekaart()">Kaart resetten</button>':''}
@@ -3687,7 +3730,8 @@ function scoreGridHtml(ctx){
   });
   for(let i=0;i<ctx.holes.length;i++){
     const h = ctx.holes[i];
-    cells += `<div class="sc-hcell"><span class="sc-hnr">H${i+1}</span><span class="sc-hsub">P${h.par} SI${h.si}</span></div>`;
+    const heeftFunny = extraPrijzenVoorHole(ctx.rondeId, i+1).length>0;
+    cells += `<div class="sc-hcell${heeftFunny?' sc-hcell-funny':''}" ${heeftFunny?`onclick="openHoleFunnieModal('${ctx.rondeId}',${i+1})"`:''}><span class="sc-hnr">H${i+1}</span><span class="sc-hsub">P${h.par} SI${h.si}</span></div>`;
     kolomSpelers.forEach((id,ci)=>{
       const {status, waarde} = scCelStatus(ctx, id, i);
       const punten = scPuntenVoor(ctx, id, i, waarde);
