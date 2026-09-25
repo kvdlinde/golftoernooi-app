@@ -354,7 +354,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.33.9';
+const APP_VERSION = '1.33.10';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -4042,7 +4042,19 @@ async function slaScoreOp(){
 // (bijv. twee groepen die op verschillende dagen van baan wisselen: beide
 // "American"-rondes krijgen zo samen één American-kolom). Zonder label krijgt
 // elke ronde gewoon haar eigen kolom, met haar eigen naam.
+// Let op: rondeLabel() hieronder is uitsluitend de WEERGAVEtekst van een
+// kolom. Voor het daadwerkelijk SAMENVOEGEN van rondes tot één kolom wordt
+// rondeLabelKey() gebruikt — anders zouden twee losse rondes die toevallig
+// dezelfde naam hebben (bijv. twee keer "Waterloo" op verschillende dagen of
+// lussen, zonder dat er ooit een rapportagelabel is ingevuld) per ongeluk
+// worden samengevoegd, puur omdat hun naam-string toevallig gelijk is.
 function rondeLabel(r){ return (r.rapportage_label && r.rapportage_label.trim()) || r.naam; }
+// Sleutel voor het groeperen van rondes tot één klassement-kolom: alleen een
+// EXPLICIET ingevuld, gelijk rapportagelabel groepeert. Zonder rapportagelabel
+// krijgt een ronde een eigen unieke sleutel (haar eigen id), zodat gelijk
+// genoemde maar verder losstaande rondes altijd hun eigen kolom en eigen
+// scores houden.
+function rondeLabelKey(r){ return (r.rapportage_label && r.rapportage_label.trim()) || ('_ronde:'+r.id); }
 // Breedte van een ronde-kolom in het Klassement, afgestemd op de lengte van
 // het label zelf (i.p.v. één vaste breedte voor alle rondes) — zo blijft er
 // op smalle (telefoon)schermen meer ruimte over voor de Speler-kolom.
@@ -4263,14 +4275,18 @@ function klsSorteerOpTotaal(){
 // renderTeamsKlassementBody. Met sorteerbaar=true wordt de kop klikbaar
 // gemaakt om het klassement op die specifieke ronde te sorteren i.p.v. op
 // het totaal — handig om ronde-resultaten (bijv. voor een dagprijs) apart
-// te bekijken.
-function klsKolomHeaderHtml(l, r0, toonSpelvormen, sorteerbaar, actief){
+// te bekijken. `key` is de groepeersleutel (rondeLabelKey — zie klsSorteerOpRonde
+// en perLabel), `displayText` is de tekst die daadwerkelijk getoond wordt
+// (rondeLabel) — die twee zijn bewust gescheiden, anders zou een ronde zonder
+// rapportagelabel als sorteersleutel haar eigen (lange, interne) unieke id
+// laten zien in plaats van haar naam.
+function klsKolomHeaderHtml(key, displayText, r0, toonSpelvormen, sorteerbaar, actief){
   const combi = r0 ? combinatieById(r0.combinatie_id) : null;
   const sub = (t)=>`<div style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.64rem;opacity:.85;line-height:1;margin-top:2px">${esc(t)}</div>`;
-  const lEsc = String(l).replace(/'/g,"\\'").replace(/"/g,'&quot;');
-  const klikAttr = sorteerbaar ? ` onclick="klsSorteerOpRonde('${lEsc}')" title="Sorteer op deze ronde"` : '';
+  const kEsc = String(key).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  const klikAttr = sorteerbaar ? ` onclick="klsSorteerOpRonde('${kEsc}')" title="Sorteer op deze ronde"` : '';
   const extraStyle = sorteerbaar ? `cursor:pointer;${actief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}` : '';
-  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(l)}px;white-space:normal;line-height:1;${extraStyle}">${esc(l)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}</th>`;
+  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(displayText)}px;white-space:normal;line-height:1;${extraStyle}">${esc(displayText)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}</th>`;
 }
 // Numerieke waarde van één ronde-cel voor een gegeven klassement-mode —
 // dezelfde onderliggende getallen als de cel()/totaal()-weergave in
@@ -4295,12 +4311,19 @@ async function tekenKlassementBody(toernooiId, mode){
   const rondeMap = {}; rondes.forEach(r=>rondeMap[r.id]=r);
   const relevant = scores.filter(s=>rondeMap[s.ronde_id]);
 
-  // Kolommen = unieke rapportagelabels, in volgorde van eerst voorkomen.
+  // Kolommen = unieke rapportagelabel-sleutels (rondeLabelKey), in volgorde
+  // van eerst voorkomen — labelText onthoudt per sleutel de bijbehorende
+  // WEERGAVEtekst (rondeLabel), zodat een ronde zonder rapportagelabel wel
+  // haar eigen kolom krijgt maar gewoon haar eigen naam laat zien.
   const labels = [];
-  rondes.forEach(r=>{ const l=rondeLabel(r); if(!labels.includes(l)) labels.push(l); });
+  const labelText = {};
+  rondes.forEach(r=>{
+    const key = rondeLabelKey(r);
+    if(!labels.includes(key)){ labels.push(key); labelText[key] = rondeLabel(r); }
+  });
   // Labels die (nog) een open ronde bevatten — admin ziet die als live/voorlopig.
   const liveLabels = new Set();
-  rondes.forEach(r=>{ if(r.status==='open') liveLabels.add(rondeLabel(r)); });
+  rondes.forEach(r=>{ if(r.status==='open') liveLabels.add(rondeLabelKey(r)); });
 
   const holesCache = {};
   function holesVoorRonde(r){
@@ -4311,7 +4334,7 @@ async function tekenKlassementBody(toernooiId, mode){
   const perSpeler = {};
   relevant.forEach(s=>{
     const r = rondeMap[s.ronde_id];
-    const label = rondeLabel(r);
+    const label = rondeLabelKey(r);
     if(!perSpeler[s.speler_id]) perSpeler[s.speler_id] = {speler_id:s.speler_id, perLabel:{}, totStableford:0, totAbsBruto:0, totAbsNetto:0, totStrokeplayBruto:0, totStrokeplayNetto:0, totBirdiesBruto:0, totEaglesBruto:0, aantalRondes:0, laatsteScore:null};
     const agg = perSpeler[s.speler_id];
     if(!agg.perLabel[label]) agg.perLabel[label] = {compleet:false, stableford:0, absBruto:0, absNetto:0, strokeplayBruto:0, strokeplayNetto:0, birdies_bruto:0, eagles_bruto:0, scoreIds:[]};
@@ -4333,7 +4356,7 @@ async function tekenKlassementBody(toernooiId, mode){
   let rows = Object.values(perSpeler).filter(a=>a.aantalRondes>0);
   if(!rows.length){ body.innerHTML = `<div class="empty">${admin?'Nog geen scores ingevoerd.':'Nog geen volledige kaarten in gesloten rondes.'}</div>`; return; }
 
-  if(mode==='teams'){ renderTeamsKlassementBody(body, toernooiId, rondes, labels, liveLabels, perSpeler, admin); return; }
+  if(mode==='teams'){ renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin); return; }
 
   const sortLabelActief = klsSortLabel && labels.includes(klsSortLabel) ? klsSortLabel : null;
   if(sortLabelActief){
@@ -4378,15 +4401,15 @@ async function tekenKlassementBody(toernooiId, mode){
   // (Regulier blijft dan ook zichtbaar, ter onderscheid met de afwijkende rondes).
   const toonSpelvormen = rondes.some(r=>(r.spelvorm && r.spelvorm!=='regulier') || (r.boost_pct && r.boost_pct!==100));
   const spelerBreedte = naamKolomBreedte(rows.map(a=>{ const sp = allSpelers.find(s=>s.id===a.speler_id); return sp?sp.naam:''; }));
-  const rkw = Math.max(108, ...labels.map(l=>rondeKolomBreedte(l)));
+  const rkw = Math.max(108, ...labels.map(l=>rondeKolomBreedte(labelText[l])));
 
   body.innerHTML = `
   ${(admin && liveLabels.size)?`<p style="font-size:.72rem;color:var(--gd);font-family:'Inter',sans-serif;margin-bottom:8px">🔴 Leaderboard — Pas zichtbaar voor deelnemers nadat je de ronde sluit.</p>`:''}
   <div class="tw"><table style="table-layout:fixed;--rkw:${rkw}px"><thead><tr>
     <th style="width:38px;vertical-align:top">#</th><th style="width:${spelerBreedte}px;vertical-align:top">Speler</th>
     ${labels.map(l=>{
-      const r0 = rondes.find(r=>rondeLabel(r)===l);
-      return klsKolomHeaderHtml(l, r0, toonSpelvormen, true, sortLabelActief===l);
+      const r0 = rondes.find(r=>rondeLabelKey(r)===l);
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l);
     }).join('')}
     <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
@@ -4419,7 +4442,7 @@ async function tekenKlassementBody(toernooiId, mode){
 // klassement hierboven) en telt per team de punten van de teamleden bij
 // elkaar op — via effectiefTeamId, dus inclusief eventuele per-ronde
 // uitzonderingen op de standaardindeling.
-function renderTeamsKlassementBody(body, toernooiId, rondes, labels, liveLabels, perSpeler, admin){
+function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin){
   const teams = teamsVoorToernooi(toernooiId);
   if(!teams.length){
     body.innerHTML = `<div class="empty">${admin?'Nog geen teams aangemaakt — ga naar Toernooien beheer → Teams beheren.':'Nog geen teams ingedeeld voor dit toernooi.'}</div>`;
@@ -4428,7 +4451,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, liveLabels,
   const perTeam = {};
   teams.forEach(tm=>{ perTeam[tm.id] = {team:tm, perLabel:{}, totaal:0}; });
   rondes.forEach(r=>{
-    const label = rondeLabel(r);
+    const label = rondeLabelKey(r);
     Object.values(perSpeler).forEach(agg=>{
       const pl = agg.perLabel[label];
       if(!pl || !pl.compleet) return;
@@ -4453,14 +4476,14 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, liveLabels,
   });
   const toonSpelvormen = rondes.some(r=>(r.spelvorm && r.spelvorm!=='regulier') || (r.boost_pct && r.boost_pct!==100));
   const teamBreedte = naamKolomBreedte(teamRows.map(t=>t.team?t.team.naam:''));
-  const rkw = Math.max(108, ...labels.map(l=>rondeKolomBreedte(l)));
+  const rkw = Math.max(108, ...labels.map(l=>rondeKolomBreedte(labelText[l])));
   body.innerHTML = `
   ${(admin && liveLabels.size)?`<p style="font-size:.72rem;color:var(--gd);font-family:'Inter',sans-serif;margin-bottom:8px">🔴 Leaderboard — Pas zichtbaar voor deelnemers nadat je de ronde sluit.</p>`:''}
   <div class="tw"><table style="table-layout:fixed;--rkw:${rkw}px"><thead><tr>
     <th style="width:38px;vertical-align:top">#</th><th style="width:${teamBreedte}px;vertical-align:top">Team</th>
     ${labels.map(l=>{
-      const r0 = rondes.find(r=>rondeLabel(r)===l);
-      return klsKolomHeaderHtml(l, r0, toonSpelvormen, true, sortLabelActief===l);
+      const r0 = rondes.find(r=>rondeLabelKey(r)===l);
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l);
     }).join('')}
     <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
