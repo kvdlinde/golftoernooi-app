@@ -261,9 +261,13 @@ async function run(){
 
   // 6. Subtotalenrij onderaan de gedeelde kaart: Bruto/Netto/STB per
   //    kolomspeler, zodat je in één oogopslag ziet hoe de flight ervoor
-  //    staat. Zelfde privacy-/officiële-scoreregels als de rest van de kaart
-  //    (geen fallback naar een gok van een medespeler), en Netto/Stableford
-  //    blijven '—' zolang iemands eigen playing hcp bij mij niet bekend is.
+  //    staat. Gebruikt eerst ieders eigen OFFICIËLE invoer, en anders een
+  //    conceptscore die ík (de kijker) zelf voor een medespeler heb
+  //    ingetikt, nog vóórdat die het zelf heeft bevestigd. Zelfde
+  //    privacyregel als de rest van de kaart blijft gelden: een gok van een
+  //    DERDE (niet ik, niet de kolomeigenaar zelf) telt nooit mee. Netto/
+  //    Stableford blijven '—' zolang iemands eigen playing hcp bij mij niet
+  //    bekend is.
   fakeLog = []; fakeScores = []; ctx.log = []; ctx.kolomScores = [];
   ctx.spelerId = 'p1';
   vm.runInContext(`ingelogdSpeler = {id:'p1', naam:'Piet Jansen', exact_hcp:18};`, sandbox);
@@ -273,9 +277,12 @@ async function run(){
   ctx.log.push({id:'f3', speler_id:'p1', hole_index:2, door_speler_id:'p1', waarde:6, updated_at:'2026-01-01T00:00:00Z'});
   ctx.log.push({id:'f4', speler_id:'p2', hole_index:0, door_speler_id:'p2', waarde:4, updated_at:'2026-01-01T00:00:00Z'});
   ctx.log.push({id:'f5', speler_id:'p2', hole_index:1, door_speler_id:'p2', waarde:5, updated_at:'2026-01-01T00:00:00Z'});
-  // p3 heeft zelf nog niets ingevuld — alleen een gok van p1 voor hem, die niet mag meetellen.
+  // p3 heeft zelf nog niets bevestigd — alleen een conceptscore die ík (p1,
+  // de kijker) voor hem heb ingetikt. Die moet nu wél meetellen.
   ctx.log.push({id:'f6', speler_id:'p3', hole_index:0, door_speler_id:'p1', waarde:6, updated_at:'2026-01-01T00:00:00Z'});
-  // p4: helemaal geen invoer.
+  // p4: een DERDE (p2) heeft voor hem een gok ingetikt — dat blijft privé
+  // tussen p2 en p4, en telt dus niet mee in mijn (p1's) werktotaal.
+  ctx.log.push({id:'f7', speler_id:'p4', hole_index:0, door_speler_id:'p2', waarde:5, updated_at:'2026-01-01T00:00:00Z'});
 
   const gridHtml = vm.runInContext('scoreGridHtml(window._scCtx)', sandbox);
   assert.ok(gridHtml.includes('>Bruto<') && gridHtml.includes('>Netto<') && gridHtml.includes('>STB<'),
@@ -289,8 +296,8 @@ async function run(){
   assert.ok(b1.cls.includes('me'), 'mijn eigen kolom (p1) moet visueel als "me" gemarkeerd zijn, net als de kolomkop');
   assert.strictEqual(b2.val, '9', "p2 bruto over haar eigen ingevulde holes (4+5) — ongeacht dat haar playing hcp mij nog onbekend is");
   assert.ok(!b2.cls.includes('me'), 'p2 is niet "me"');
-  assert.strictEqual(b3.val, '—', "p3 heeft zelf nog niets ingevuld — de gok van p1 voor hem telt niet mee, zelfde regel als de rest van de kaart");
-  assert.strictEqual(b4.val, '—', 'p4 heeft niets ingevuld');
+  assert.strictEqual(b3.val, '6', "p3 heeft zelf nog niets bevestigd, maar mijn eigen conceptscore voor hem telt nu wél mee in het werktotaal");
+  assert.strictEqual(b4.val, '—', "de gok van een DERDE (p2) voor p4 blijft privé tussen hen en telt niet mee in mijn werktotaal");
 
   assert.notStrictEqual(n1.val, '—', 'mijn eigen netto is bekend (ik ken mijn eigen playing hcp)');
   assert.strictEqual(n2.val, '—', "p2's netto/stableford kan ik niet tonen zolang ik haar playing hcp niet ken");
