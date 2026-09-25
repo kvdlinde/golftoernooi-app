@@ -354,7 +354,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.33.8';
+const APP_VERSION = '1.33.9';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -3705,6 +3705,28 @@ function scHoleScoresUitLog(ctx, spelerId){
   }
   return arr;
 }
+// hole_scores-array voor de subtotalenrij: eerst ieders eigen OFFICIËLE
+// invoer (scOfficieleWaarde, ongeacht wat de kijker zelf heeft ingetikt),
+// en pas als die er nog niet is, terugvallen op een conceptscore die de
+// kijker zelf voor die medespeler heeft ingetikt — nog vóórdat diegene het
+// zelf heeft bevestigd. Een gok van een DERDE (niet de kolomeigenaar zelf,
+// niet de kijker) telt nooit mee — zelfde privacyregel als de rest van de
+// kaart. Gebruikt uitsluitend voor de subtotalenrij (scSubtotalenRijenHtml):
+// dat is een indicatief werktotaal tijdens het invoeren, geen officiële
+// uitslag — de klassement-/uitslagberekening blijft strikt bij
+// scHoleScoresUitLog hierboven.
+function scHoleScoresWeergave(ctx, spelerId){
+  const arr = [];
+  for(let i=0;i<18;i++){
+    if(i >= ctx.holes.length){ arr.push(null); continue; }
+    const officieel = scOfficieleWaarde(ctx, spelerId, i);
+    if(officieel!=null){ arr.push(officieel); continue; }
+    const entries = (ctx.log||[]).filter(l=>l.speler_id===spelerId && l.hole_index===i);
+    const concept = entries.find(e=>e.door_speler_id===ctx.spelerId);
+    arr.push(concept ? concept.waarde : null);
+  }
+  return arr;
+}
 // Playing handicap van een kolom-speler: van de ingelogde speler zelf de live
 // gekozen tee (ctx.currentPH), van een medespeler diens eigen laatst opgeslagen
 // scores-rij (die kent alleen díe speler zelf, via zijn eigen tee-keuze).
@@ -3744,13 +3766,16 @@ function scoreGridHtml(ctx){
   if(kolomSpelers.length>1) cells += scSubtotalenRijenHtml(ctx, kolomSpelers);
   return `<div class="sc-grid" style="grid-template-columns:28px repeat(${kolomSpelers.length},1fr)">${cells}</div>`;
 }
-// Subtotalen (Bruto/Netto/Stableford) van álle kolomspelers onderaan de
+// Subtotalen (Bruto/Netto/STB) van álle kolomspelers onderaan de
 // gedeelde scorekaart — dezelfde live 'tot nu toe'-optelling als de eigen
 // samenvattingstegels (scLiveTotalen), maar dan per medespeler, zodat je in
 // één oogopslag ziet hoe de rest van de flight ervoor staat zonder elke
-// kaart apart te hoeven bekijken. Gebruikt uitsluitend elks eigen officiële
-// invoer (scHoleScoresUitLog) — dezelfde privacyregel als de rest van de
-// gedeelde kaart.
+// kaart apart te hoeven bekijken. Telt de WEERGAVEwaarde per cel
+// (scHoleScoresWeergave) — dus óók een conceptscore die de kijker zelf voor
+// een medespeler heeft ingevoerd en die diegene nog niet zelf heeft
+// bevestigd. Zelfde privacyregel als de rest van de gedeelde kaart (nooit
+// een invoer van een DERDE meetellen). Dit is een indicatief werktotaal,
+// geen officiële uitslag.
 function scSubtotalenRijenHtml(ctx, kolomSpelers){
   const rijen = [
     {label:'Bruto', key:'bruto'},
@@ -3758,7 +3783,7 @@ function scSubtotalenRijenHtml(ctx, kolomSpelers){
     {label:'STB', key:'stableford'},
   ];
   const perSpeler = kolomSpelers.map(id=>{
-    const holeScores = scHoleScoresUitLog(ctx, id);
+    const holeScores = scHoleScoresWeergave(ctx, id);
     const pH = scPlayingHcpVoor(ctx, id);
     return scLiveTotalen(holeScores, ctx.holes, pH);
   });
