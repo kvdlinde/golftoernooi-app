@@ -188,6 +188,14 @@ tr:last-child td{border-bottom:none}
 .sk th:first-child,.sk td:first-child{position:sticky;left:0;text-align:left;font-family:'Inter',sans-serif;font-weight:600;background:var(--wh);z-index:1}
 .sk th:first-child{background:var(--gd)}
 .sk .sk-sub{background:var(--cr);font-weight:700}
+/* Bruto-score-kleuren op de Score-rij van de scorekaart-popup (klikbaar vanuit
+   het klassement) — uitsluitend hier, en uitsluitend op bruto slagen t.o.v.
+   par (dus los van stableford-punten): eagle/birdie/par/bogey/meer dan bogey. */
+.sk .sk-eagle{background:#e65100;color:#fff;font-weight:700;border-radius:4px}
+.sk .sk-birdie{background:var(--red);color:#fff;font-weight:700;border-radius:4px}
+.sk .sk-par{background:var(--blue);color:#fff;font-weight:700;border-radius:4px}
+.sk .sk-bogey{background:var(--gd);color:#fff;font-weight:700;border-radius:4px}
+.sk .sk-worse{background:#757575;color:#fff;font-weight:700;border-radius:4px}
 /* Spelersbeheer-tabel: vaste kolombreedtes zodat Naam/Hcp/Status/Toernooien/Acties
    netjes naast elkaar staan i.p.v. dat de browser de ruimte willekeurig verdeelt. */
 .spelerstabel{table-layout:fixed;min-width:680px}
@@ -338,7 +346,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.33.3';
+const APP_VERSION = '1.33.4';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -4408,9 +4416,14 @@ function fSign(n){
   if(n===0) return '—';
   return n>0 ? '+'+n : String(n);
 }
-function ptsClass(pts){
-  if(pts==null) return '';
-  return pts===0?'pts-blob':pts===1?'pts-1':pts===2?'pts-2':pts===3?'pts-3':'pts-4p';
+// Kleurcodering ALLEEN voor deze scorekaart-popup (klikbaar vanuit het
+// klassement) — uitsluitend op bruto slagen t.o.v. par, los van stableford-
+// punten (die de rest van de app elders gebruikt, bv. het live invoerbadge
+// en de gedeelde scorekaart — dat blijft daar ongewijzigd).
+function skGrossKlasse(score, par){
+  if(score==null || par==null) return '';
+  const diff = score-par;
+  return diff<=-2?'sk-eagle':diff===-1?'sk-birdie':diff===0?'sk-par':diff===1?'sk-bogey':'sk-worse';
 }
 // Eén label kan meerdere gesloten rondes bundelen (rapportage_label) — laat dan
 // eerst kiezen welke ronde-kaart je wilt zien. Anders direct de kaart openen.
@@ -4489,9 +4502,9 @@ async function renderScorekaartPopup(scoreId){
     rijHtml('Par', p=>`<td>${p.par}</td>`, k=>somSegment(k,'par'), ()=>somTotaal('par')),
     rijHtml('SI', p=>`<td>${p.si}</td>`, ()=>'—', ()=>'—'),
     rijHtml('Shots', p=>`<td>${fSign(p.lopend)}</td>`, k=>fSign(per[k.to-1].lopend), ()=>fSign(per[per.length-1].lopend)),
-    rijHtml('Score', p=>`<td class="${ptsClass(p.pts)}">${p.score!=null?p.score:'—'}</td>`, k=>somSegment(k,'score'), ()=>somTotaal('score')),
+    rijHtml('Score', p=>`<td class="${skGrossKlasse(p.score,p.par)}">${p.score!=null?p.score:'—'}</td>`, k=>somSegment(k,'score'), ()=>somTotaal('score')),
     rijHtml('Netto', p=>`<td>${p.netto!=null?p.netto:'—'}</td>`, k=>somSegment(k,'netto'), ()=>somTotaal('netto')),
-    rijHtml('Sfd', p=>`<td class="${ptsClass(p.pts)}">${p.pts!=null?p.pts:'—'}</td>`, k=>somSegment(k,'pts'), ()=>somTotaal('pts')),
+    rijHtml('Sfd', p=>`<td>${p.pts!=null?p.pts:'—'}</td>`, k=>somSegment(k,'pts'), ()=>somTotaal('pts')),
   ].join('');
 
   const subtitel = [
