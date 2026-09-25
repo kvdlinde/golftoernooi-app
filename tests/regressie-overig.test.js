@@ -500,9 +500,12 @@ async function main(){
     assert.strictEqual(vm.runInContext(`skGrossKlasse(null, 5)`, sandbox), '');
     assert.strictEqual(vm.runInContext(`skGrossKlasse(5, null)`, sandbox), '');
 
+    // Zachte tint-cellen (achtergrond + eigen tekstkleur), zoals het oorspronkelijke
+    // ontwerp — geen effen blokjes met witte letters meer (op verzoek teruggedraaid).
     ['sk-eagle','sk-birdie','sk-par','sk-bogey','sk-worse'].forEach(cls=>{
-      const re = new RegExp('\\.sk \\.'+cls+'\\{[^}]*color:#fff[^}]*\\}');
-      assert.ok(re.test(html), `.sk .${cls} moet bestaan met witte tekst (color:#fff)`);
+      const re = new RegExp('\\.sk \\.'+cls+'\\{background:[^;}]+;color:[^}]+\\}');
+      assert.ok(re.test(html), `.sk .${cls} moet bestaan met een eigen achtergrond- en tekstkleur`);
+      assert.ok(!new RegExp('\\.sk \\.'+cls+'\\{[^}]*color:#fff[^}]*\\}').test(html), `.sk .${cls} mag geen witte tekst meer hebben`);
     });
     assert.ok(!/function ptsClass\(/.test(html), 'ptsClass (stableford-gebaseerd) hoort hier niet meer te bestaan');
 
