@@ -17,3 +17,4 @@ jobs:
       - run: node tests/syntax-check.js
       - run: node tests/score-grid.test.js
       - run: node tests/admin-race.test.js
+      - run: node tests/regressie-overig.test.js
