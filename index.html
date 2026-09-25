@@ -354,7 +354,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.33.7';
+const APP_VERSION = '1.33.8';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -3755,7 +3755,7 @@ function scSubtotalenRijenHtml(ctx, kolomSpelers){
   const rijen = [
     {label:'Bruto', key:'bruto'},
     {label:'Netto', key:'netto'},
-    {label:'Stableford', key:'stableford'},
+    {label:'STB', key:'stableford'},
   ];
   const perSpeler = kolomSpelers.map(id=>{
     const holeScores = scHoleScoresUitLog(ctx, id);
