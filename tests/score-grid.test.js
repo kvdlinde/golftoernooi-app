@@ -200,7 +200,7 @@ async function run(){
   assert.strictEqual(st.waarde, 6, "op p2's EIGEN scherm toont dezelfde cel p2's eigen invoer (6)");
   vm.runInContext(`ingelogdSpeler = {id:'p1', naam:'Piet Jansen', exact_hcp:18};`, sandbox);
 
-  console.log('[1/4] Validatiestatus/weergave — privacy tussen medespelers: OK');
+  console.log('[1/5] Validatiestatus/weergave — privacy tussen medespelers: OK');
 
   // 4. scOfficieleWaarde/scHoleScoresUitLog: uitsluitend iemands EIGEN
   //    invoer telt, GEEN fallback naar een medespeler die voor hem/haar
@@ -218,7 +218,7 @@ async function run(){
   assert.strictEqual(holeScores[0], 7);
   assert.strictEqual(holeScores[1], null, "holes die p4 zelf niet invulde blijven leeg, ook al bestaan er elders al gokjes van medespelers");
 
-  console.log('[2/4] Officiële score kent geen fallback naar medespelers: OK');
+  console.log('[2/5] Officiële score kent geen fallback naar medespelers: OK');
 
   // 5. Volledige flow tegen de nep-backend: intikken, valideren, mismatch, wissen
   fakeLog = []; fakeScores = []; ctx.log = []; ctx.kolomScores = [];
@@ -257,15 +257,69 @@ async function run(){
   assert.strictEqual(remaining.length, 1, "wissen mag alleen de eigen invoer verwijderen, niet die van een ander");
   assert.strictEqual(remaining[0].door_speler_id, 'p1', "de overgebleven invoer is die van p1");
 
-  console.log('[3/4] Volledige invoer/validatie/mismatch/wis-flow: OK');
+  console.log('[3/5] Volledige invoer/validatie/mismatch/wis-flow: OK');
 
-  // 6. Geen flight (of geen startlijst in gebruik) -> gewoon terug naar 1 kolom, geen crash
+  // 6. Subtotalenrij onderaan de gedeelde kaart: Bruto/Netto/STB per
+  //    kolomspeler, zodat je in één oogopslag ziet hoe de flight ervoor
+  //    staat. Zelfde privacy-/officiële-scoreregels als de rest van de kaart
+  //    (geen fallback naar een gok van een medespeler), en Netto/Stableford
+  //    blijven '—' zolang iemands eigen playing hcp bij mij niet bekend is.
+  fakeLog = []; fakeScores = []; ctx.log = []; ctx.kolomScores = [];
+  ctx.spelerId = 'p1';
+  vm.runInContext(`ingelogdSpeler = {id:'p1', naam:'Piet Jansen', exact_hcp:18};`, sandbox);
+
+  ctx.log.push({id:'f1', speler_id:'p1', hole_index:0, door_speler_id:'p1', waarde:5, updated_at:'2026-01-01T00:00:00Z'});
+  ctx.log.push({id:'f2', speler_id:'p1', hole_index:1, door_speler_id:'p1', waarde:4, updated_at:'2026-01-01T00:00:00Z'});
+  ctx.log.push({id:'f3', speler_id:'p1', hole_index:2, door_speler_id:'p1', waarde:6, updated_at:'2026-01-01T00:00:00Z'});
+  ctx.log.push({id:'f4', speler_id:'p2', hole_index:0, door_speler_id:'p2', waarde:4, updated_at:'2026-01-01T00:00:00Z'});
+  ctx.log.push({id:'f5', speler_id:'p2', hole_index:1, door_speler_id:'p2', waarde:5, updated_at:'2026-01-01T00:00:00Z'});
+  // p3 heeft zelf nog niets ingevuld — alleen een gok van p1 voor hem, die niet mag meetellen.
+  ctx.log.push({id:'f6', speler_id:'p3', hole_index:0, door_speler_id:'p1', waarde:6, updated_at:'2026-01-01T00:00:00Z'});
+  // p4: helemaal geen invoer.
+
+  const gridHtml = vm.runInContext('scoreGridHtml(window._scCtx)', sandbox);
+  assert.ok(gridHtml.includes('>Bruto<') && gridHtml.includes('>Netto<') && gridHtml.includes('>STB<'),
+    'onder de gedeelde kaart moeten Bruto/Netto/STB-subtotaalrijen staan');
+
+  const fvals = [...gridHtml.matchAll(/<div class="(sc-fval[^"]*)">([^<]*)<\/div>/g)].map(m=>({cls:m[1], val:m[2]}));
+  assert.strictEqual(fvals.length, 12, 'moet 3 rijen x 4 kolommen (p1-p4) aan subtotaal-waarden bevatten');
+  const [b1,b2,b3,b4, n1,n2,n3,n4, s1,s2,s3,s4] = fvals;
+
+  assert.strictEqual(b1.val, '15', 'p1 bruto over de ingevulde holes (5+4+6)');
+  assert.ok(b1.cls.includes('me'), 'mijn eigen kolom (p1) moet visueel als "me" gemarkeerd zijn, net als de kolomkop');
+  assert.strictEqual(b2.val, '9', "p2 bruto over haar eigen ingevulde holes (4+5) — ongeacht dat haar playing hcp mij nog onbekend is");
+  assert.ok(!b2.cls.includes('me'), 'p2 is niet "me"');
+  assert.strictEqual(b3.val, '—', "p3 heeft zelf nog niets ingevuld — de gok van p1 voor hem telt niet mee, zelfde regel als de rest van de kaart");
+  assert.strictEqual(b4.val, '—', 'p4 heeft niets ingevuld');
+
+  assert.notStrictEqual(n1.val, '—', 'mijn eigen netto is bekend (ik ken mijn eigen playing hcp)');
+  assert.strictEqual(n2.val, '—', "p2's netto/stableford kan ik niet tonen zolang ik haar playing hcp niet ken");
+  assert.strictEqual(n3.val, '—');
+  assert.strictEqual(n4.val, '—');
+
+  // Zodra p2's eigen playing hcp wél bekend is (bv. omdat ze zelf al een tee
+  // gekozen en opgeslagen heeft), moet netto/stableford ook voor haar verschijnen.
+  ctx.kolomScores.push({speler_id:'p2', playing_hcp:14});
+  const gridHtml2 = vm.runInContext('scoreGridHtml(window._scCtx)', sandbox);
+  const fvals2 = [...gridHtml2.matchAll(/<div class="sc-fval[^"]*">([^<]*)<\/div>/g)].map(m=>m[1]);
+  assert.notStrictEqual(fvals2[5], '—', "zodra p2's playing hcp bekend is, moet haar netto wél verschijnen");
+
+  // Bij een enkele kolom (geen flight) voegt de subtotalenrij niets toe aan
+  // de losse Bruto/Netto/Stableford-tegels eronder — dan moet hij wegblijven.
+  sandbox.__enkeleCtx = {...ctx, kolomSpelers:['p1']};
+  const soloGridHtml = vm.runInContext('scoreGridHtml(window.__enkeleCtx)', sandbox);
+  assert.ok(!soloGridHtml.includes('sc-fval') && !soloGridHtml.includes('sc-flabel'),
+    'bij een losse kaart (geen flight) mag er geen subtotalenrij verschijnen');
+
+  console.log('[4/5] Subtotalenrij per medespeler onderaan de gedeelde kaart: OK');
+
+  // 7. Geen flight (of geen startlijst in gebruik) -> gewoon terug naar 1 kolom, geen crash
   const soloCtx = {spelerId:'p1', flights:[], fSpelers:[]};
   sandbox.window._scCtx = soloCtx;
   const soloKolom = vm.runInContext('scKolomSpelers(window._scCtx)', sandbox);
   assert.strictEqual(JSON.stringify(soloKolom), JSON.stringify(['p1']));
 
-  console.log('[4/4] Fallback zonder flight: OK');
+  console.log('[5/5] Fallback zonder flight: OK');
   console.log('ALLE SCORE-GRID TESTS GESLAAGD');
 }
 
