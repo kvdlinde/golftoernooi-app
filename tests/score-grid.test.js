@@ -112,6 +112,12 @@ function buildSandbox(){
   const sandbox = {
     console, document: documentStub, window: {}, fetch: fakeFetch,
     crypto: { getRandomValues(arr){ for(let i=0;i<arr.length;i++) arr[i]=Math.floor(Math.random()*256); }, subtle: {} },
+    localStorage: {
+      _s: {},
+      getItem(k){ return (k in this._s) ? this._s[k] : null; },
+      setItem(k,v){ this._s[k] = String(v); },
+      removeItem(k){ delete this._s[k]; },
+    },
     setTimeout, clearTimeout, Promise, URLSearchParams,
     Set, Array, Math, Date, JSON, parseInt, parseFloat, isNaN, String, Number, Object,
   };
@@ -200,7 +206,7 @@ async function run(){
   assert.strictEqual(st.waarde, 6, "op p2's EIGEN scherm toont dezelfde cel p2's eigen invoer (6)");
   vm.runInContext(`ingelogdSpeler = {id:'p1', naam:'Piet Jansen', exact_hcp:18};`, sandbox);
 
-  console.log('[1/5] Validatiestatus/weergave — privacy tussen medespelers: OK');
+  console.log('[1/6] Validatiestatus/weergave — privacy tussen medespelers: OK');
 
   // 4. scOfficieleWaarde/scHoleScoresUitLog: uitsluitend iemands EIGEN
   //    invoer telt, GEEN fallback naar een medespeler die voor hem/haar
@@ -218,7 +224,7 @@ async function run(){
   assert.strictEqual(holeScores[0], 7);
   assert.strictEqual(holeScores[1], null, "holes die p4 zelf niet invulde blijven leeg, ook al bestaan er elders al gokjes van medespelers");
 
-  console.log('[2/5] Officiële score kent geen fallback naar medespelers: OK');
+  console.log('[2/6] Officiële score kent geen fallback naar medespelers: OK');
 
   // 5. Volledige flow tegen de nep-backend: intikken, valideren, mismatch, wissen
   fakeLog = []; fakeScores = []; ctx.log = []; ctx.kolomScores = [];
@@ -257,7 +263,7 @@ async function run(){
   assert.strictEqual(remaining.length, 1, "wissen mag alleen de eigen invoer verwijderen, niet die van een ander");
   assert.strictEqual(remaining[0].door_speler_id, 'p1', "de overgebleven invoer is die van p1");
 
-  console.log('[3/5] Volledige invoer/validatie/mismatch/wis-flow: OK');
+  console.log('[3/6] Volledige invoer/validatie/mismatch/wis-flow: OK');
 
   // 6. Subtotalenrij onderaan de gedeelde kaart: Bruto/Netto/STB per
   //    kolomspeler, zodat je in één oogopslag ziet hoe de flight ervoor
@@ -318,15 +324,110 @@ async function run(){
   assert.ok(!soloGridHtml.includes('sc-fval') && !soloGridHtml.includes('sc-flabel'),
     'bij een losse kaart (geen flight) mag er geen subtotalenrij verschijnen');
 
-  console.log('[4/5] Subtotalenrij per medespeler onderaan de gedeelde kaart: OK');
+  console.log('[4/6] Subtotalenrij per medespeler onderaan de gedeelde kaart: OK');
 
-  // 7. Geen flight (of geen startlijst in gebruik) -> gewoon terug naar 1 kolom, geen crash
+  // 7. Optioneel invoeren voor één medespeler via een vinkje in de kolomkop
+  //    (scToggleMedespelerInvoer/scActieveKolommen/scActieveMedespelerKolom):
+  //    standaard voer je alleen je eigen score in en zijn medespeler-kolommen
+  //    gedimd en niet-invoerbaar (disabled) — pas als je er ÉÉN aanvinkt (bij
+  //    een vierbal dus hooguit één tegelijk, een nieuwe vervangt de vorige)
+  //    wordt precies die kolom ook invoerbaar. De spring-volgorde volgt dit:
+  //    zonder aangevinkte medespeler spring je na je eigen invoer naar
+  //    beneden (volgende hole); mét een aangevinkte medespeler spring je
+  //    eerst naar rechts naar diens kolom, en pas na diens invoer naar
+  //    beneden.
+  fakeLog = []; fakeScores = []; ctx.log = []; ctx.kolomScores = [];
+  ctx.spelerId = 'p1'; ctx.kolomSpelers = ['p1','p2','p3','p4'];
+  vm.runInContext(`ingelogdSpeler = {id:'p1', naam:'Piet Jansen', exact_hcp:18}; localStorage.removeItem('scMedeInvoer_r1_p1');`, sandbox);
+
+  // Pakt de HTML-blok van kolom ci in de headerrij (0-based, ikzelf is 0).
+  function headBlok(gh, ci){
+    const heads = [...gh.matchAll(/<div class="sc-head[^"]*">[\s\S]*?<\/div>/g)];
+    return heads[ci] ? heads[ci][0] : '';
+  }
+  // Pakt de HTML van de invoer-cel (scc-wrap) voor kolom ci, hole i.
+  function celBlok(gh, ci, i){
+    const marker = `id="scc_${ci}_${i}"`;
+    const idx = gh.indexOf(marker);
+    if(idx<0) throw new Error('cel niet gevonden: kolom '+ci+', hole '+i);
+    const wrapStart = gh.lastIndexOf('<div class="scc-wrap', idx);
+    const wrapEnd = gh.indexOf('</div></div>', idx) + '</div></div>'.length;
+    return gh.slice(wrapStart, wrapEnd);
+  }
+
+  let gh = vm.runInContext('scoreGridHtml(window._scCtx)', sandbox);
+  assert.strictEqual((gh.match(/<input type="checkbox"/g)||[]).length, 3, 'de drie medespelers (p2,p3,p4) krijgen elk een vinkje, ikzelf (p1) niet');
+  assert.ok(!headBlok(gh,0).includes('checkbox'), 'mijn eigen kolomkop (p1) krijgt geen vinkje');
+  [1,2,3].forEach(ci=>{
+    const head = headBlok(gh, ci);
+    assert.ok(head.includes('sc-head-dim'), `kolom ${ci} moet standaard gedimd zijn (geen medespeler aangevinkt)`);
+    assert.ok(!/checked/.test(head), `kolom ${ci} mag standaard niet aangevinkt zijn`);
+    const cel = celBlok(gh, ci, 0);
+    assert.ok(/\bdisabled\b/.test(cel), `invoercel van kolom ${ci} moet standaard disabled zijn`);
+    assert.ok(cel.includes('scc-wrap-dim'), `invoercel van kolom ${ci} moet standaard gedimd zijn`);
+  });
+  let celEigen = celBlok(gh, 0, 0);
+  assert.ok(!/\bdisabled\b/.test(celEigen), 'mijn eigen invoercel mag nooit disabled zijn');
+  assert.ok(!celEigen.includes('scc-wrap-dim'), 'mijn eigen invoercel mag nooit gedimd zijn');
+
+  // Vink p3 (kolomindex 2) aan als medespeler voor wie ik ook invoer.
+  vm.runInContext('scToggleMedespelerInvoer(2)', sandbox);
+  gh = elements['scGrid'].innerHTML;
+  assert.ok(headBlok(gh,2).includes('checked'), 'p3 (kolom 2) moet nu aangevinkt zijn');
+  assert.ok(!headBlok(gh,2).includes('sc-head-dim'), 'p3 (kolom 2) mag niet meer gedimd zijn');
+  assert.ok(!/\bdisabled\b/.test(celBlok(gh,2,0)), 'p3 (kolom 2) moet nu invoerbaar zijn');
+  [1,3].forEach(ci=>{
+    assert.ok(headBlok(gh,ci).includes('sc-head-dim') && !headBlok(gh,ci).includes('checked'), `kolom ${ci} moet gedimd en niet aangevinkt blijven — maar één medespeler tegelijk actief`);
+    assert.ok(/\bdisabled\b/.test(celBlok(gh,ci,0)), `kolom ${ci} moet disabled blijven`);
+  });
+  assert.strictEqual((gh.match(/checked/g)||[]).length, 1, 'precies één medespeler-vinkje mag aangevinkt zijn');
+
+  // Nu p4 (kolomindex 3) aanvinken vervangt p3 automatisch (nooit twee tegelijk).
+  vm.runInContext('scToggleMedespelerInvoer(3)', sandbox);
+  gh = elements['scGrid'].innerHTML;
+  assert.ok(headBlok(gh,3).includes('checked') && !headBlok(gh,3).includes('sc-head-dim'), 'p4 (kolom 3) is nu de actieve medespeler');
+  assert.ok(headBlok(gh,2).includes('sc-head-dim') && !headBlok(gh,2).includes('checked'), 'p3 (kolom 2) dimt weer mee zodra een andere medespeler wordt aangevinkt');
+  assert.strictEqual((gh.match(/checked/g)||[]).length, 1, 'ook na het wisselen mag maar één medespeler-vinkje aangevinkt zijn');
+
+  // Nogmaals p4 aanvinken (uitvinken) gaat terug naar de standaard: niemand aangevinkt.
+  vm.runInContext('scToggleMedespelerInvoer(3)', sandbox);
+  gh = elements['scGrid'].innerHTML;
+  assert.strictEqual((gh.match(/checked/g)||[]).length, 0, 'nogmaals aanvinken van dezelfde medespeler vinkt hem weer uit');
+  [1,2,3].forEach(ci=>assert.ok(headBlok(gh,ci).includes('sc-head-dim'), `kolom ${ci} moet weer gedimd zijn nadat alles is uitgevinkt`));
+
+  // Spring-volgorde, standaard (niemand aangevinkt): na mijn eigen invoer op
+  // hole 1 springt de cursor naar mijn eigen kolom van hole 2, NIET naar een
+  // (gedimde) medespeler-kolom.
+  makeEl('scc_0_0'); makeEl('scc_0_1'); makeEl('scc_2_0');
+  elements['scGrid'].innerHTML = gh;
+  elements['scc_0_0'].value = '4';
+  await vm.runInContext('scGridCommit(0, 0, 18)', sandbox);
+  assert.ok(elements['scc_0_1']._focused, 'zonder aangevinkte medespeler moet de cursor na mijn eigen invoer naar mijn eigen kolom van de volgende hole springen');
+  assert.ok(!elements['scc_2_0']._focused, 'zonder aangevinkte medespeler mag de cursor niet naar een medespeler-kolom springen');
+
+  // Spring-volgorde met p3 (kolom 2) aangevinkt: na mijn eigen invoer op hole 1
+  // eerst naar RECHTS naar p3's kolom op diezelfde hole, en pas na haar/zijn
+  // invoer naar beneden naar mijn eigen kolom van hole 2.
+  vm.runInContext('scToggleMedespelerInvoer(2)', sandbox);
+  makeEl('scc_0_0'); makeEl('scc_2_0'); makeEl('scc_0_1');
+  elements['scc_0_0'].value = '5';
+  await vm.runInContext('scGridCommit(0, 0, 18)', sandbox);
+  assert.ok(elements['scc_2_0']._focused, 'met p3 aangevinkt moet de cursor na mijn eigen invoer naar rechts springen naar p3 haar kolom');
+  assert.ok(!elements['scc_0_1']._focused, 'nog niet naar de volgende hole — eerst p3 haar invoer op deze hole');
+
+  elements['scc_2_0'].value = '5';
+  await vm.runInContext('scGridCommit(2, 0, 18)', sandbox);
+  assert.ok(elements['scc_0_1']._focused, 'na p3 haar invoer op deze hole springt de cursor naar beneden, naar mijn eigen kolom van de volgende hole');
+
+  console.log('[5/6] Optioneel invoeren voor één medespeler (vinkje) + aangepaste spring-volgorde: OK');
+
+  // 8. Geen flight (of geen startlijst in gebruik) -> gewoon terug naar 1 kolom, geen crash
   const soloCtx = {spelerId:'p1', flights:[], fSpelers:[]};
   sandbox.window._scCtx = soloCtx;
   const soloKolom = vm.runInContext('scKolomSpelers(window._scCtx)', sandbox);
   assert.strictEqual(JSON.stringify(soloKolom), JSON.stringify(['p1']));
 
-  console.log('[5/5] Fallback zonder flight: OK');
+  console.log('[6/6] Fallback zonder flight: OK');
   console.log('ALLE SCORE-GRID TESTS GESLAAGD');
 }
 
