@@ -206,6 +206,41 @@ tr:last-child td{border-bottom:none}
 .sc-flabel{font-family:'Inter',sans-serif;font-size:.66rem;font-weight:700;color:var(--tl);text-transform:uppercase;letter-spacing:.03em;display:flex;align-items:center;justify-content:flex-start;padding:3px 2px}
 .sc-fval{font-family:'IBM Plex Mono',monospace;font-size:.85rem;font-weight:700;color:var(--td);text-align:center;padding:3px 1px}
 .sc-fval.me{color:var(--gold)}
+/* MUNTJES SPEL — één regel helemaal onderaan de gedeelde scorekaart: een
+   kopje over de volle breedte, daaronder per speler één vakje. Alleen je
+   eigen vakje is een invoerveld (keuzelijst -9..+9, want het cijfer-
+   toetsenbord van veel telefoons heeft geen minteken). */
+.munt-icoon{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--gold);box-shadow:inset 0 0 0 2px var(--goldl);vertical-align:middle;flex-shrink:0}
+.sc-munthdr{grid-column:1/-1;border-top:2px solid var(--gold);margin-top:8px;padding:7px 2px 2px;font-family:'Inter',sans-serif;font-size:.74rem;font-weight:700;color:var(--gd);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px}
+.sc-munthdr span{font-weight:400;color:var(--tl);font-size:.68rem}
+.sc-muntcel{display:flex;align-items:center;justify-content:center;padding:3px 1px}
+.sc-munt{width:100%;max-width:66px;height:38px;text-align:center;text-align-last:center;font-family:'IBM Plex Mono',monospace;font-size:1.05rem;font-weight:700;border:2px solid var(--gold);border-radius:6px;background:#fff8e1;color:var(--td);padding:0 2px;-webkit-appearance:none;appearance:none}
+.sc-munt:focus{outline:none;border-color:var(--gl);background:#fff}
+.sc-munt:disabled{opacity:.65}
+/* Muntjescijfer in het klassement: bewust kleiner en in een eigen kleur, zodat
+   het nooit voor een Stableford-cijfer wordt aangezien. */
+.kls-munt{display:block;font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:600;color:#8a6d1c;line-height:1.25;margin-top:1px;white-space:nowrap}
+.kls-munt::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-right:4px;vertical-align:baseline}
+.kls-munt-tot{font-family:'IBM Plex Mono',monospace;color:#8a6d1c}
+/* De twee totaalkolommen van het Teams-klassement (Stableford en Muntjes). Op
+   een telefoon zo smal mogelijk — kop "STB", weinig marge — zodat ze samen
+   nauwelijks meer ruimte vragen dan de ene Totaal-kolom van voorheen; op
+   tablet/laptop voluit. */
+.kls-tot-stb{width:44px}
+.kls-tot-munt{width:56px}
+#klsBody table th.kls-tot-stb,#klsBody table th.kls-tot-munt,#klsBody table td.kls-tot{padding-left:3px;padding-right:3px}
+#klsBody table th.kls-tot-munt{font-size:.62rem;letter-spacing:0}
+.kls-lang{display:none}
+@media (min-width:641px){
+  .kls-tot-stb{width:94px}
+  .kls-tot-munt{width:78px}
+  #klsBody table th.kls-tot-stb,#klsBody table th.kls-tot-munt,#klsBody table td.kls-tot{padding-left:9px;padding-right:9px}
+  #klsBody table th.kls-tot-munt{font-size:.68rem;letter-spacing:.04em}
+  .kls-lang{display:inline}
+  .kls-kort{display:none}
+}
+.munt-neg{color:var(--red)}
+.hb.hb-munt{background:#fff8e1;color:#8a6d1c}
 .klikbaar{cursor:pointer}
 .sk table{font-family:'IBM Plex Mono',monospace}
 .sk th,.sk td{text-align:center;padding:6px 8px;white-space:nowrap;font-size:.72rem}
@@ -393,7 +428,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.34.0';
+const APP_VERSION = '1.35.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -805,6 +840,23 @@ alter table ronde_flights add column if not exists start_hole int;
 -- toonde, zodat bestaande toernooien er niet anders uit gaan zien.
 alter table toernooi_rondes add column if not exists scoring_types jsonb not null default '["stableford","abs-netto","abs-bruto"]'::jsonb;
 
+-- Muntjes Spel: per ronde aan/uit te zetten. Iedere speler vult aan het einde
+-- van de ronde zelf zijn muntjestotaal in (-9 t/m +9). Bewust een EIGEN tabel,
+-- los van 'scores': Boost, Hidden holes en de andere spelvormen rekenen
+-- uitsluitend op 'scores' en kunnen de muntjes dus niet beinvloeden. Geen rij
+-- voor een speler = nog niet ingevuld (0 is een echte score).
+alter table toernooi_rondes add column if not exists muntjes boolean not null default false;
+create table if not exists muntjes_scores (
+  id uuid default gen_random_uuid() primary key,
+  ronde_id uuid not null references toernooi_rondes(id) on delete cascade,
+  speler_id uuid not null references spelers(id) on delete cascade,
+  waarde int not null check (waarde between -9 and 9),
+  ingevoerd_door text default 'speler', -- speler | admin
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(ronde_id, speler_id)
+);
+
 alter table banen enable row level security;
 alter table lussen enable row level security;
 alter table combinaties enable row level security;
@@ -821,6 +873,7 @@ alter table ronde_extra_prijzen enable row level security;
 alter table teams enable row level security;
 alter table team_leden enable row level security;
 alter table score_holes_log enable row level security;
+alter table muntjes_scores enable row level security;
 
 -- MVP: open policies (zelfde aanpak als de eerdere Wintercup-app vóór de
 -- edge-function hardening). Prima voor een kleine groep vrienden; wachtwoorden
@@ -846,6 +899,15 @@ drop policy if exists "allow all" on ronde_extra_prijzen; create policy "allow a
 drop policy if exists "allow all" on teams; create policy "allow all" on teams for all using (true);
 drop policy if exists "allow all" on team_leden; create policy "allow all" on team_leden for all using (true);
 drop policy if exists "allow all" on score_holes_log; create policy "allow all" on score_holes_log for all using (true);
+drop policy if exists "allow all" on muntjes_scores; create policy "allow all" on muntjes_scores for all using (true);
+
+-- Live bijwerken van muntjesscores (flightgenoten zien elkaars cijfer direct).
+-- Zet Realtime aan voor de nieuwe tabel; staat hij al aan, of bestaat de
+-- publicatie niet, dan gebeurt er niets.
+do $$ begin
+  alter publication supabase_realtime add table muntjes_scores;
+exception when duplicate_object then null; when undefined_object then null;
+end $$;
 `;}
 
 function renderSetupPanel(){
@@ -1051,6 +1113,8 @@ async function laadAlles(){
     const [teams, teamLeden] = await Promise.all([sbG('teams','order=volgorde'), sbG('team_leden','')]);
     allTeams = teams||[]; allTeamLeden = teamLeden||[];
   }catch(e){ allTeams = []; allTeamLeden = []; }
+  // Zodra er ergens een ronde met het Muntjes Spel bestaat: live meeluisteren.
+  try{ setupMuntjesRealtime(); }catch(e){}
 }
 
 /* =========================================================
@@ -1089,6 +1153,49 @@ function heropenRealtime(){
     realtimeChannel = null;
   }
   setupRealtime();
+  if(muntjesChannel){
+    try{ muntjesChannel.unsubscribe(); }catch(e){}
+    muntjesChannel = null;
+  }
+  setupMuntjesRealtime();
+}
+// Muntjes Spel: bewust een EIGEN Realtime-kanaal, los van het kanaal hierboven.
+// De tabel 'muntjes_scores' bestaat pas na de nieuwste SQL-migratie; mocht het
+// abonneren daarop om wat voor reden ook mislukken, dan raakt dat nooit de
+// bestaande live updates van rondes/scores/scorekaart. Wordt pas opgezet zodra
+// er minstens één ronde met het Muntjes Spel is.
+let muntjesChannel = null;
+function setupMuntjesRealtime(){
+  if(muntjesChannel) return;
+  if(!window.supabase || !window.supabase.createClient) return;
+  if(!allRondes.some(rondeHeeftMuntjes)) return;
+  try{
+    const client = window.supabase.createClient(SBU, SBK);
+    muntjesChannel = client.channel('golftoernooi-muntjes')
+      .on('postgres_changes', {event:'*', schema:'public', table:'muntjes_scores'}, verwerkMuntjesLiveUpdate)
+      .subscribe();
+  }catch(e){ muntjesChannel = null; }
+}
+let muntjesLiveTimer = null;
+function verwerkMuntjesLiveUpdate(){
+  if(muntjesLiveTimer) clearTimeout(muntjesLiveTimer);
+  muntjesLiveTimer = setTimeout(async ()=>{
+    // 1) Open scorekaart: alleen de muntjesvakjes bijwerken (niet het hele
+    //    raster hertekenen — dan zou een vakje waarin net getikt wordt zijn
+    //    focus verliezen).
+    const modalEl = document.getElementById('moScore');
+    const ctx = window._scCtx;
+    if(modalEl && modalEl.classList.contains('open') && ctx && ctx.muntjesAan && ctx.spelerId){
+      try{
+        ctx.muntjes = await laadMuntjesVoorRondes([ctx.rondeId], true);
+        scMuntjesVakjesBijwerken(ctx);
+      }catch(e){ /* volgende melding of heropenen van de kaart haalt het in */ }
+    }
+    // 2) Klassement open op Muntjes of Teams: opnieuw tekenen.
+    const klsActief = document.getElementById('panel-klassement')?.classList.contains('active');
+    const mode = localStorage.getItem('klassementMode');
+    if(klsActief && (mode==='muntjes' || mode==='teams')) renderKlassementPanel();
+  }, 500);
 }
 let liveUpdateTimer = null;
 function verwerkLiveUpdate(){
@@ -1828,7 +1935,7 @@ function renderBeheerToernooienPanel(){
           const comb = combinatieById(r.combinatie_id);
           const gesloten = r.status==='gesloten';
           return `<div class="rc"><div class="rch">
-            <div><div class="rd" style="font-size:.95rem">${esc(r.naam)}${r.rapportage_label?` <span class="hb">${esc(r.rapportage_label)}</span>`:''}</div><div class="rm">${fDatum(r.datum)} · ${combinatieLabel(comb)} ${gesloten?`<button class="btn bg" style="padding:5px 11px;border-radius:20px;font-size:.78rem;font-weight:600" onclick="heropenRonde('${r.id}')">Heropenen</button>`:statusBadge(r.status)}</div></div>
+            <div><div class="rd" style="font-size:.95rem">${esc(r.naam)}${r.rapportage_label?` <span class="hb">${esc(r.rapportage_label)}</span>`:''}${rondeHeeftMuntjes(r)?' <span class="hb hb-munt">Muntjes</span>':''}</div><div class="rm">${fDatum(r.datum)} · ${combinatieLabel(comb)} ${gesloten?`<button class="btn bg" style="padding:5px 11px;border-radius:20px;font-size:.78rem;font-weight:600" onclick="heropenRonde('${r.id}')">Heropenen</button>`:statusBadge(r.status)}</div></div>
           </div>
           ${gesloten ? '' : `<div class="ra">
             <button class="btn bpu bsm" onclick="openStartlijstModal('${r.id}')">Startlijst</button>
@@ -2329,6 +2436,15 @@ function openRondeModal(toernooiId, rondeId){
       </select>
       <div id="rnSpelvormExtra"></div>
     </div>
+    <div class="fg">
+      <label>Extra spel <span class="hint">staat los van de scoring hierboven — Boost en Hidden holes hebben er geen invloed op</span></label>
+      <div class="hh-grid">
+        <label class="hh-box${rondeHeeftMuntjes(r)?' aan':''}">
+          <input type="checkbox" class="hh-cb" id="rnMuntjes" ${rondeHeeftMuntjes(r)?'checked':''} onchange="this.closest('.hh-box').classList.toggle('aan', this.checked)">
+          <span>Muntjes Spel</span>
+        </label>
+      </div>
+    </div>
     <div class="brow"><button class="btn bp bf" onclick="saveRonde('${toernooiId}'${r?`,'${r.id}'`:''})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moRonde')">Annuleren</button></div>
   `);
   verversRondeSpelvormUI();
@@ -2393,10 +2509,23 @@ async function saveRonde(toernooiId, id){
   if(!naam || !combinatie_id){ toast('Vul naam en combinatie in', true); return; }
   const basis = {naam, datum, combinatie_id, volgorde, rapportage_label};
   const uitgebreid = {...basis, spelvorm, boost_pct, hidden_holes, scoring_types};
+  const muntjesEl = document.getElementById('rnMuntjes');
+  const muntjes = !!(muntjesEl && muntjesEl.checked);
+  let muntjesNietOpgeslagen = false;
   try{
     try{
-      if(id) await sbPa('toernooi_rondes', id, uitgebreid);
-      else await sbP('toernooi_rondes', {toernooi_id:toernooiId, ...uitgebreid});
+      try{
+        if(id) await sbPa('toernooi_rondes', id, {...uitgebreid, muntjes});
+        else await sbP('toernooi_rondes', {toernooi_id:toernooiId, ...uitgebreid, muntjes});
+      }catch(eMunt){
+        // Vangnet specifiek voor het Muntjes Spel: bestaat alleen de kolom
+        // 'muntjes' nog niet (nieuwste migratie nog niet gedraaid), sla dan
+        // de ronde op zónder dat veld — zodat spelvorm/boost/scoring gewoon
+        // blijven werken zoals ze deden.
+        if(id) await sbPa('toernooi_rondes', id, uitgebreid);
+        else await sbP('toernooi_rondes', {toernooi_id:toernooiId, ...uitgebreid});
+        muntjesNietOpgeslagen = muntjes;
+      }
     }catch(e){
       // Vangnet: de kolommen spelvorm/hidden_holes/boost_pct/scoring_types
       // bestaan nog niet in de database (migratie nog niet gedraaid). Val
@@ -2409,7 +2538,9 @@ async function saveRonde(toernooiId, id){
       await laadAlles(); renderBeheerToernooienPanel();
       return;
     }
-    closeModal('moRonde'); toast('Ronde opgeslagen');
+    closeModal('moRonde');
+    if(muntjesNietOpgeslagen) toast('Ronde opgeslagen — het Muntjes Spel werkt pas na het uitvoeren van de nieuwe SQL-migratie', true);
+    else toast('Ronde opgeslagen');
     await laadAlles(); renderBeheerToernooienPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
@@ -2459,7 +2590,13 @@ async function herberekenRondeScores(rondeId){
   return aangepast;
 }
 async function sluitRonde(id){
-  if(!confirm('Ronde sluiten? Alle kaarten worden eerst opnieuw doorgerekend met de actuele tee- en handicapgegevens. Deelnemers zien dan de uitslag. Zorg dat alle kaarten zijn ingevoerd.')) return;
+  // Muntjes Spel: na het sluiten kunnen spelers hun muntjestotaal niet meer
+  // zelf invullen — waarschuw dus vooraf wie het nog niet gedaan heeft.
+  const zonderMuntjes = await muntjesOntbrekendVoorRonde(id);
+  const muntjesWaarschuwing = zonderMuntjes.length
+    ? '\n\nLet op — Muntjes Spel: '+zonderMuntjes.length+' speler(s) hebben nog geen muntjesscore ingevuld ('+zonderMuntjes.join(', ')+'). Na het sluiten kunnen zij dat niet meer zelf; jij als admin nog wel.'
+    : '';
+  if(!confirm('Ronde sluiten? Alle kaarten worden eerst opnieuw doorgerekend met de actuele tee- en handicapgegevens. Deelnemers zien dan de uitslag. Zorg dat alle kaarten zijn ingevoerd.'+muntjesWaarschuwing)) return;
   try{
     const aangepast = await herberekenRondeScores(id);
     await sbPa('toernooi_rondes', id, {status:'gesloten'});
@@ -3289,7 +3426,7 @@ async function openToernooiDetail(toernooiId){
       }
     }
     return `<div class="rc"><div class="rch" style="align-items:flex-start">
-      <div><div class="rd" style="font-size:1rem">${esc(baan?baan.naam:'—')}</div><div class="rm">${comb?esc(comb.naam):'—'}${r.datum?' · '+fDatum(r.datum):''}</div>${mijnFlightHtml}</div>
+      <div><div class="rd" style="font-size:1rem">${esc(baan?baan.naam:'—')}</div><div class="rm">${comb?esc(comb.naam):'—'}${r.datum?' · '+fDatum(r.datum):''}</div>${rondeHeeftMuntjes(r)?'<div class="rm" style="margin-top:3px"><i class="munt-icoon"></i> Muntjes Spel — vul na de ronde je totaal in op je scorekaart</div>':''}${mijnFlightHtml}</div>
       ${rondeFlightIds.size?`<button class="btn bpu bsm" onclick="openVolledigeStartlijstModal('${r.id}')" style="flex-shrink:0">Startlijst</button>`:''}
     </div>
     <div class="ra">
@@ -3484,7 +3621,7 @@ async function openScoreModal(rondeId, forceSpelerId){
       ${deeln.map(d=>{const sp=allSpelers.find(s=>s.id===d.speler_id); return sp?`<option value="${sp.id}" ${spelerId===sp.id?'selected':''}>${esc(sp.naam)}</option>`:'';}).join('')}
     </select></div>`;
   }
-  window._scCtx = {rondeId, holes, tees, toernooi, readOnly, currentPH:null, existingScore:null};
+  window._scCtx = {rondeId, holes, tees, toernooi, readOnly, currentPH:null, existingScore:null, muntjesAan:rondeHeeftMuntjes(ronde), muntjes:[]};
   openModalHtml('moScore', `<h3>${rondeTitelHtml}</h3>
     ${readOnly?'<p style="font-size:.78rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-bottom:10px">Deze ronde is gesloten — alleen-lezen.</p>':''}
     ${spelerPickerHtml}
@@ -3538,6 +3675,9 @@ async function renderScoreBody(spelerId){
     // scheelt bij het afronden opnieuw alles moeten navragen/intikken.
     try{ ctx.log = await sbG('score_holes_log','ronde_id=eq.'+ctx.rondeId+'&speler_id=eq.'+spelerId) || []; }catch(e){ ctx.log = []; }
   }
+  // Muntjes Spel (alleen als het voor deze ronde aan staat): de muntjesscores
+  // van deze ronde, voor de regel onderaan de kaart.
+  ctx.muntjes = ctx.muntjesAan ? await laadMuntjesVoorRondes([ctx.rondeId]) : [];
 
   const body = document.getElementById('scBody');
   body.innerHTML = `
@@ -3558,6 +3698,7 @@ async function renderScoreBody(spelerId){
       ${ctx.readOnly?'':(isAdmin()?'<button class="btn bp bf" id="scOpslaanBtn" style="margin-top:12px" onclick="slaScoreOp()">Score opslaan</button>':'<button class="btn bp bf" id="scOpslaanBtn" style="margin-top:12px" onclick="closeModal(\'moScore\')">Klaar</button>')}
       ${(isAdmin() && ctx.existingScore)?'<button class="btn bd bf" style="margin-top:8px" onclick="resetScorekaart()">Kaart resetten</button>':''}
     </div>
+    ${(isAdmin() && ctx.muntjesAan)?`<div class="fg" style="margin-top:14px;border-top:2px solid var(--gold);padding-top:10px"><label><i class="munt-icoon"></i> Muntjes Spel <span class="hint">eindtotaal van deze speler — staat los van de scorekaart en wordt direct opgeslagen</span></label><select id="scMuntEigen" onchange="scMuntjesGewijzigd(this)">${muntjesKeuzeOptiesHtml(scMuntjesWaarde(ctx, spelerId))}</select></div>`:''}
   `;
   if(teeId){ document.getElementById('scTee').value = teeId; onTeeChange(); }
   else if(!isAdmin()){ scUpdateSummary(scOfficieleUitkomst(scHoleScoresUitLog(ctx, spelerId), ctx.holes, null)); }
@@ -3904,7 +4045,76 @@ function scoreGridHtml(ctx){
     });
   }
   if(kolomSpelers.length>1) cells += scSubtotalenRijenHtml(ctx, kolomSpelers);
+  if(ctx.muntjesAan) cells += scMuntjesRijHtml(ctx, kolomSpelers);
   return `<div class="sc-grid" style="grid-template-columns:28px repeat(${kolomSpelers.length},1fr)">${cells}</div>`;
+}
+// MUNTJES SPEL op de gedeelde scorekaart: één regel helemaal onderaan, per
+// speler één vakje. Alleen je EIGEN vakje is invulbaar (keuzelijst); dat van
+// je flightgenoten zie je, maar kun je niet wijzigen. In een gesloten ronde
+// is alles alleen-lezen. De admin corrigeert via zijn eigen kaartweergave
+// (zie renderScoreBody).
+function scMuntjesWaarde(ctx, spelerId){
+  const rij = (ctx.muntjes||[]).find(m=>m.speler_id===spelerId);
+  return (rij && rij.waarde!=null) ? rij.waarde : null;
+}
+function muntjesKeuzeOptiesHtml(huidig){
+  let h = `<option value="" ${huidig==null?'selected':''}>–</option>`;
+  for(let n=MUNTJES_MAX;n>=MUNTJES_MIN;n--) h += `<option value="${n}" ${huidig===n?'selected':''}>${fmtMunt(n)}</option>`;
+  return h;
+}
+function scMagEigenMuntjesInvoeren(ctx){
+  return !ctx.readOnly && !isAdmin() && !!ingelogdSpeler && ctx.spelerId===ingelogdSpeler.id;
+}
+function scMuntjesRijHtml(ctx, kolomSpelers){
+  const eigenInvoer = scMagEigenMuntjesInvoeren(ctx);
+  let row = `<div class="sc-munthdr">Muntjes Spel${eigenInvoer?' <span>vul na de laatste hole je eigen totaal in</span>':''}</div><div class="sc-hcell"><i class="munt-icoon"></i></div>`;
+  kolomSpelers.forEach((id,ci)=>{
+    const w = scMuntjesWaarde(ctx, id);
+    if(id===ctx.spelerId && eigenInvoer){
+      row += `<div class="sc-muntcel"><select class="sc-munt" id="scMuntEigen" aria-label="Mijn muntjesscore" onchange="scMuntjesGewijzigd(this)">${muntjesKeuzeOptiesHtml(w)}</select></div>`;
+    } else {
+      row += `<div class="sc-fval${id===ctx.spelerId?' me':''}" id="scMuntVal_${ci}">${fmtMunt(w)}</div>`;
+    }
+  });
+  return row;
+}
+// Werkt (na een live melding) alleen de muntjesvakjes bij, zonder het raster
+// opnieuw op te bouwen. Het eigen invoerveld blijft ongemoeid zolang het de
+// focus heeft.
+function scMuntjesVakjesBijwerken(ctx){
+  (ctx.kolomSpelers||[ctx.spelerId]).forEach((id,ci)=>{
+    const el = document.getElementById('scMuntVal_'+ci);
+    if(el) el.textContent = fmtMunt(scMuntjesWaarde(ctx, id));
+  });
+  const sel = document.getElementById('scMuntEigen');
+  if(sel && document.activeElement!==sel){
+    const w = scMuntjesWaarde(ctx, ctx.spelerId);
+    sel.value = w==null ? '' : String(w);
+  }
+}
+// Slaat de gekozen muntjesscore direct op (geen aparte opslaan-knop). Een
+// speler kan uitsluitend zijn eigen score zetten; de admin die van de speler
+// wiens kaart hij open heeft. "–" kiezen wist de score weer (= niet ingevuld).
+async function scMuntjesGewijzigd(sel){
+  const ctx = window._scCtx;
+  if(!ctx || !ctx.spelerId || !ctx.muntjesAan) return;
+  const vorige = scMuntjesWaarde(ctx, ctx.spelerId);
+  const herstel = ()=>{ sel.value = vorige==null ? '' : String(vorige); };
+  if(!isAdmin() && !scMagEigenMuntjesInvoeren(ctx)){ herstel(); return; }
+  const waarde = sel.value==='' ? null : parseInt(sel.value,10);
+  if(waarde!=null && (isNaN(waarde) || waarde<MUNTJES_MIN || waarde>MUNTJES_MAX)){
+    herstel(); toast('Een muntjesscore ligt tussen '+MUNTJES_MIN+' en +'+MUNTJES_MAX, true); return;
+  }
+  sel.disabled = true;
+  try{
+    const rij = await slaMuntjesScoreOp(ctx.rondeId, ctx.spelerId, waarde, isAdmin()?'admin':'speler');
+    ctx.muntjes = (ctx.muntjes||[]).filter(m=>m.speler_id!==ctx.spelerId);
+    if(rij) ctx.muntjes.push(rij);
+    toast(waarde==null ? 'Muntjesscore gewist' : 'Muntjesscore opgeslagen: '+fmtMunt(waarde));
+  }catch(e){
+    herstel();
+    toast('Muntjesscore opslaan mislukt: '+e.message, true);
+  }finally{ sel.disabled = false; }
 }
 // Subtotalen (Bruto/Netto/STB) van álle kolomspelers onderaan de
 // gedeelde scorekaart — dezelfde live 'tot nu toe'-optelling als de eigen
@@ -4213,6 +4423,145 @@ function naamKolomBreedte(namen){
   return Math.max(90, Math.min(200, 22 + maxLen*7));
 }
 /* =========================================================
+   MUNTJES SPEL
+   Een los spel naast de gewone scoring. Per ronde aan te zetten (kolom
+   'muntjes' op toernooi_rondes). Iedere speler vult aan het einde van de ronde
+   zelf één getal in: zijn muntjestotaal, -9 t/m +9. Dat staat in een EIGEN
+   tabel ('muntjes_scores'), bewust los van 'scores':
+   - Boost, Hidden holes en 2x3/5x4/2x5 rekenen uitsluitend op 'scores'
+     (zie effectieveStablefordVoorRonde hieronder) en komen dus nooit aan de
+     muntjes;
+   - omgekeerd tellen muntjes nergens mee in Stableford/ABS/Strokeplay/
+     Birdies. In het Teams-klassement staan ze als tweede, apart cijfer
+     naast Stableford — nooit erbij opgeteld.
+   Geen rij voor een speler = nog niet ingevuld; 0 is een echte score.
+   ========================================================= */
+const MUNTJES_MIN = -9, MUNTJES_MAX = 9;
+// Sorteersleutel voor "sorteer het Teams-klassement op het muntjestotaal" —
+// reist mee in klsSortLabel, maar is nooit een echte ronde-kolom, dus elke
+// andere subtab valt er vanzelf mee terug op zijn eigen Totaal.
+const KLS_SORT_MUNTJES = '__muntjes__';
+// Altijd met teken, en met een gewoon koppelteken als minteken: zo komt het
+// ook in de PDF-export goed over.
+function fmtMunt(n){
+  if(n==null || isNaN(n)) return '—';
+  return n>0 ? '+'+n : String(n);
+}
+function rondeHeeftMuntjes(r){ return !!(r && r.muntjes===true); }
+function toernooiHeeftMuntjes(toernooiId){ return allRondes.some(r=>r.toernooi_id===toernooiId && rondeHeeftMuntjes(r)); }
+// Muntjesscores van de opgegeven rondes. Faalt zacht (lege lijst) zolang de
+// tabel nog niet bestaat; met strikt=true wordt de fout doorgegeven, voor
+// plekken die bij een mislukte ophaalactie hun oude gegevens willen houden.
+async function laadMuntjesVoorRondes(rondeIds, strikt){
+  if(!rondeIds || !rondeIds.length) return [];
+  try{ return await sbG('muntjes_scores','ronde_id=in.('+rondeIds.join(',')+')') || []; }
+  catch(e){ if(strikt) throw e; return []; }
+}
+// Zet (of wist, bij waarde null) de muntjesscore van één speler voor één
+// ronde. Kijkt eerst of er al een rij is, zodat een eerdere invoer vanaf een
+// ander toestel (bv. door de admin) wordt bijgewerkt in plaats van te botsen.
+async function slaMuntjesScoreOp(rondeId, spelerId, waarde, ingevoerdDoor){
+  const filter = 'ronde_id=eq.'+rondeId+'&speler_id=eq.'+spelerId;
+  const bestaand = ((await sbG('muntjes_scores', filter)) || [])[0];
+  if(waarde==null){
+    if(bestaand) await sbD('muntjes_scores', bestaand.id);
+    return null;
+  }
+  const velden = {waarde, ingevoerd_door:ingevoerdDoor||'speler', updated_at:new Date().toISOString()};
+  if(bestaand){
+    const bijgewerkt = await sbPa('muntjes_scores', bestaand.id, velden);
+    return (bijgewerkt && bijgewerkt[0]) || {...bestaand, ...velden};
+  }
+  const nieuw = await sbP('muntjes_scores', {ronde_id:rondeId, speler_id:spelerId, ...velden});
+  return (nieuw && nieuw[0]) || {ronde_id:rondeId, speler_id:spelerId, ...velden};
+}
+// Namen van spelers die in deze ronde al wel holes hebben ingevuld maar nog
+// geen muntjesscore — voor de waarschuwing bij het sluiten van de ronde.
+async function muntjesOntbrekendVoorRonde(rondeId){
+  if(!rondeHeeftMuntjes(rondeById(rondeId))) return [];
+  try{
+    const [scores, muntjes] = await Promise.all([
+      sbG('scores','ronde_id=eq.'+rondeId+'&select=speler_id,hole_scores'),
+      sbG('muntjes_scores','ronde_id=eq.'+rondeId+'&select=speler_id')
+    ]);
+    const heeft = new Set((muntjes||[]).map(m=>m.speler_id));
+    return (scores||[])
+      .filter(s=>Array.isArray(s.hole_scores) && s.hole_scores.some(v=>v!=null) && !heeft.has(s.speler_id))
+      .map(s=>{ const sp = allSpelers.find(x=>x.id===s.speler_id); return sp?sp.naam:'?'; })
+      .sort((a,b)=>a.localeCompare(b));
+  }catch(e){ return []; }
+}
+// Muntjes-subtab van het klassement: de individuele stand. Leest uitsluitend
+// 'muntjes_scores' — geen Boost, geen Hidden holes, geen handicap. Kolommen
+// zijn alleen de rondes waar het spel aan staat. Wie in zo'n ronde een kaart
+// heeft maar nog geen muntjesscore, staat er wel in (met een streepje), zodat
+// ontbrekende invoer zichtbaar is. Gelijke stand = gedeelde plaats.
+function renderMuntjesKlassementBody(body, muntjesRondes, muntjesRijen, scores, labelText, liveLabels, admin){
+  if(!muntjesRondes.length){
+    body.innerHTML = `<div class="empty">${admin?'Bij geen enkele ronde staat het Muntjes Spel aan — zet het aan via Toernooien beheer → een ronde → Bewerken.':'Nog geen gesloten rondes met het Muntjes Spel — de stand verschijnt zodra de admin een ronde sluit.'}</div>`;
+    return;
+  }
+  const rondeMap = {}; muntjesRondes.forEach(r=>rondeMap[r.id]=r);
+  const labels = [];
+  muntjesRondes.forEach(r=>{ const k = rondeLabelKey(r); if(!labels.includes(k)) labels.push(k); });
+  const perSpeler = {};
+  const agg = (id)=> perSpeler[id] || (perSpeler[id] = {speler_id:id, perLabel:{}, totaal:null});
+  (scores||[]).forEach(s=>{
+    if(rondeMap[s.ronde_id] && Array.isArray(s.hole_scores) && s.hole_scores.some(v=>v!=null)) agg(s.speler_id);
+  });
+  (muntjesRijen||[]).forEach(m=>{
+    const r = rondeMap[m.ronde_id];
+    if(!r || m.waarde==null) return;
+    const a = agg(m.speler_id), k = rondeLabelKey(r);
+    a.perLabel[k] = (a.perLabel[k]==null ? 0 : a.perLabel[k]) + m.waarde;
+    a.totaal = (a.totaal==null ? 0 : a.totaal) + m.waarde;
+  });
+  const rows = Object.values(perSpeler);
+  if(!rows.length){ body.innerHTML = `<div class="empty">Nog geen muntjesscores ingevuld.</div>`; return; }
+  const naamVan = (a)=>{ const sp = allSpelers.find(s=>s.id===a.speler_id); return sp?sp.naam:'?'; };
+  const sortLabelActief = klsSortLabel && labels.includes(klsSortLabel) ? klsSortLabel : null;
+  const sortWaarde = (a)=>{ const v = sortLabelActief ? a.perLabel[sortLabelActief] : a.totaal; return v==null ? null : v; };
+  rows.sort((a,b)=>{
+    const va = sortWaarde(a), vb = sortWaarde(b);
+    if(va==null && vb==null) return naamVan(a).localeCompare(naamVan(b));
+    if(va==null) return 1;
+    if(vb==null) return -1;
+    return vb-va || naamVan(a).localeCompare(naamVan(b));
+  });
+  let plaats = 0;
+  const plaatsen = rows.map((a,i)=>{
+    const v = sortWaarde(a);
+    if(v==null) return null;
+    if(i===0 || v!==sortWaarde(rows[i-1])) plaats = i+1;
+    return plaats;
+  });
+  const muntHtml = (v)=> v==null ? '<span style="color:var(--tl)">—</span>' : `<span class="${v<0?'munt-neg':''}">${fmtMunt(v)}</span>`;
+  const spelerBreedte = naamKolomBreedte(rows.map(naamVan));
+  const rkw = Math.max(108, ...labels.map(l=>rondeKolomBreedte(labelText[l])));
+  body.innerHTML = `
+  ${(admin && labels.some(l=>liveLabels.has(l)))?`<p style="font-size:.72rem;color:var(--gd);font-family:'Inter',sans-serif;margin-bottom:8px">🔴 Leaderboard — Pas zichtbaar voor deelnemers nadat je de ronde sluit.</p>`:''}
+  <div class="tw"><table style="table-layout:fixed;--rkw:${rkw}px"><thead><tr>
+    <th style="width:38px;vertical-align:top">#</th><th style="width:${spelerBreedte}px;vertical-align:top">Speler</th>
+    ${labels.map(l=>klsKolomHeaderHtml(l, labelText[l], muntjesRondes.find(r=>rondeLabelKey(r)===l), false, true, sortLabelActief===l)).join('')}
+    <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
+  </tr></thead><tbody>
+  ${rows.map((a,i)=>{
+    const pl = plaatsen[i];
+    const rb = pl===1?'r1':pl===2?'r2':pl===3?'r3':'ro';
+    return `<tr>
+      <td><span class="rb ${rb}">${pl==null?'–':pl}</span></td>
+      <td><b>${esc(naamVan(a))}</b></td>
+      ${labels.map(l=>`<td style="text-align:center">${muntHtml(a.perLabel[l]==null?null:a.perLabel[l])}</td>`).join('')}
+      <td style="text-align:center"><b>${muntHtml(a.totaal)}</b></td>
+    </tr>`;
+  }).join('')}
+  </tbody></table></div>
+  <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:8px">Muntjes Spel: iedere speler vult na de ronde zijn eigen muntjestotaal in. Staat los van Stableford — Boost en Hidden holes hebben er geen invloed op. Hoogste totaal wint; bij een gelijke stand deel je de plaats. Een streepje betekent: nog niet ingevuld.</p>
+  <p style="font-size:.68rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Tik op een ronde-kolom om alleen op die ronde te sorteren, of op "Totaal" om terug te gaan.</p>
+  `;
+}
+
+/* =========================================================
    SPELVORMEN PER RONDE — Regulier / 2x3-5x4-2x5 / Hidden holes, + Boost
    Beïnvloedt alleen het Stableford-klassement (en dus ook de Teams-subtab,
    die daarop voortbouwt) — ABS strokeplay en Birdies blijven ongewijzigd,
@@ -4328,7 +4677,8 @@ async function renderKlassementPanel(){
   if(!toernooiId || !lijst.find(t=>t.id===toernooiId)) toernooiId = lijst[0].id;
   localStorage.setItem('klassementToernooi', toernooiId);
   const actieveTypes = actieveScoringTypes(toernooiId);
-  const vasteModes = ['birdie-bruto','extra','teams'];
+  const heeftMuntjes = toernooiHeeftMuntjes(toernooiId);
+  const vasteModes = ['birdie-bruto','extra','teams', ...(heeftMuntjes?['muntjes']:[])];
   const geldigeModes = [...actieveTypes, ...vasteModes];
   let mode = localStorage.getItem('klassementMode')||'stableford';
   if(!geldigeModes.includes(mode)) mode = actieveTypes[0] || 'birdie-bruto';
@@ -4338,6 +4688,7 @@ async function renderKlassementPanel(){
   <div class="subtabs">
     ${actieveTypes.map(t=>`<button class="subtab ${mode===t?'active':''}" onclick="wisselKlassementMode('${t}')">${esc(KLASSEMENT_MODE_LABELS[t])}</button>`).join('')}
     <button class="subtab ${mode==='birdie-bruto'?'active':''}" onclick="wisselKlassementMode('birdie-bruto')">Birdies</button>
+    ${heeftMuntjes?`<button class="subtab ${mode==='muntjes'?'active':''}" onclick="wisselKlassementMode('muntjes')">Muntjes</button>`:''}
     <button class="subtab ${mode==='extra'?'active':''}" onclick="wisselKlassementMode('extra')">Funnies</button>
     <button class="subtab ${mode==='teams'?'active':''}" onclick="wisselKlassementMode('teams')">Teams</button>
   </div>
@@ -4349,7 +4700,7 @@ function wisselKlassementMode(m){ localStorage.setItem('klassementMode', m); ren
 const KLASSEMENT_MODE_LABELS = {
   'stableford':'Stableford', 'abs-netto':'ABS Netto', 'abs-bruto':'ABS Bruto',
   'strokeplay-netto':'Strokeplay Netto', 'strokeplay-bruto':'Strokeplay Bruto',
-  'birdie-bruto':'Birdies', 'extra':'Funnies', 'teams':'Teams'
+  'birdie-bruto':'Birdies', 'extra':'Funnies', 'teams':'Teams', 'muntjes':'Muntjes'
 };
 // Exporteert precies wat er nu op het scherm staat (huidig toernooi + subtab)
 // als PDF. Leest de al gerenderde tabel in #klsBody uit i.p.v. alles opnieuw
@@ -4374,8 +4725,18 @@ function exporteerKlassementPdf(){
   doc.setTextColor(0);
   const table = body.querySelector('table');
   if(table){
-    const head = [Array.from(table.querySelectorAll('thead th')).map(th=>th.innerText.replace(/\s+/g,' ').trim())];
-    const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr=>Array.from(tr.querySelectorAll('td')).map(td=>td.innerText.replace(/\s+/g,' ').trim()));
+    const head = [Array.from(table.querySelectorAll('thead th')).map(th=>th.getAttribute('data-pdf') || th.innerText.replace(/\s+/g,' ').trim())];
+    // Teams met het Muntjes Spel: een ronde-cel bevat dan twee cijfers
+    // (Stableford en, kleiner, muntjes). Op het scherm onderscheidt de opmaak
+    // die twee; in de PDF zetten we er een schuine streep tussen.
+    const celTekst = (td)=>{
+      const munt = td.querySelector('.kls-munt');
+      if(!munt) return td.innerText.replace(/\s+/g,' ').trim();
+      const kloon = td.cloneNode(true);
+      kloon.querySelector('.kls-munt').remove();
+      return kloon.textContent.replace(/\s+/g,' ').trim() + ' / ' + munt.textContent.replace(/\s+/g,' ').trim();
+    };
+    const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr=>Array.from(tr.querySelectorAll('td')).map(celTekst));
     doc.autoTable({
       head, body: rows, startY: 28,
       styles:{fontSize:7, halign:'center'},
@@ -4424,13 +4785,13 @@ function klsSorteerOpTotaal(){
 // (rondeLabel) — die twee zijn bewust gescheiden, anders zou een ronde zonder
 // rapportagelabel als sorteersleutel haar eigen (lange, interne) unieke id
 // laten zien in plaats van haar naam.
-function klsKolomHeaderHtml(key, displayText, r0, toonSpelvormen, sorteerbaar, actief){
+function klsKolomHeaderHtml(key, displayText, r0, toonSpelvormen, sorteerbaar, actief, extraSub){
   const combi = r0 ? combinatieById(r0.combinatie_id) : null;
   const sub = (t)=>`<div style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.64rem;opacity:.85;line-height:1;margin-top:2px">${esc(t)}</div>`;
   const kEsc = String(key).replace(/'/g,"\\'").replace(/"/g,'&quot;');
   const klikAttr = sorteerbaar ? ` onclick="klsSorteerOpRonde('${kEsc}')" title="Sorteer op deze ronde"` : '';
   const extraStyle = sorteerbaar ? `cursor:pointer;${actief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}` : '';
-  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(displayText)}px;white-space:normal;line-height:1;${extraStyle}">${esc(displayText)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}</th>`;
+  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(displayText)}px;white-space:normal;line-height:1;${extraStyle}">${esc(displayText)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}${extraSub?sub(extraSub):''}</th>`;
 }
 // Numerieke waarde van één ronde-cel voor een gegeven klassement-mode —
 // dezelfde onderliggende getallen als de cel()/totaal()-weergave in
@@ -4469,6 +4830,13 @@ async function tekenKlassementBody(toernooiId, mode){
   const liveLabels = new Set();
   rondes.forEach(r=>{ if(r.status==='open') liveLabels.add(rondeLabelKey(r)); });
 
+  // Muntjes Spel: alleen ophalen voor de twee subtabs die het tonen. Komt uit
+  // een eigen tabel en gaat nergens door de Stableford-berekening hieronder.
+  const muntjesRondes = rondes.filter(rondeHeeftMuntjes);
+  let muntjesRijen = [];
+  if(muntjesRondes.length && (mode==='muntjes' || mode==='teams')) muntjesRijen = await laadMuntjesVoorRondes(muntjesRondes.map(r=>r.id));
+  if(mode==='muntjes'){ renderMuntjesKlassementBody(body, muntjesRondes, muntjesRijen, relevant, labelText, liveLabels, admin); return; }
+
   const holesCache = {};
   function holesVoorRonde(r){
     if(!(r.id in holesCache)) holesCache[r.id] = combinatieHoles(combinatieById(r.combinatie_id));
@@ -4498,9 +4866,10 @@ async function tekenKlassementBody(toernooiId, mode){
     if(!agg.laatsteScore || r.volgorde >= (rondeMap[agg.laatsteScore.ronde_id]?.volgorde ?? -Infinity)) agg.laatsteScore = s;
   });
   let rows = Object.values(perSpeler).filter(a=>a.aantalRondes>0);
-  if(!rows.length){ body.innerHTML = `<div class="empty">${admin?'Nog geen scores ingevoerd.':'Nog geen volledige kaarten in gesloten rondes.'}</div>`; return; }
+  // (Teams met al ingevulde muntjes mag wél door: die tellen ook zonder complete kaart.)
+  if(!rows.length && !(mode==='teams' && muntjesRijen.length)){ body.innerHTML = `<div class="empty">${admin?'Nog geen scores ingevoerd.':'Nog geen volledige kaarten in gesloten rondes.'}</div>`; return; }
 
-  if(mode==='teams'){ renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin); return; }
+  if(mode==='teams'){ renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin, muntjesRondes, muntjesRijen); return; }
 
   const sortLabelActief = klsSortLabel && labels.includes(klsSortLabel) ? klsSortLabel : null;
   if(sortLabelActief){
@@ -4586,14 +4955,15 @@ async function tekenKlassementBody(toernooiId, mode){
 // klassement hierboven) en telt per team de punten van de teamleden bij
 // elkaar op — via effectiefTeamId, dus inclusief eventuele per-ronde
 // uitzonderingen op de standaardindeling.
-function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin){
+function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin, muntjesRondes, muntjesRijen){
+  muntjesRondes = muntjesRondes || []; muntjesRijen = muntjesRijen || [];
   const teams = teamsVoorToernooi(toernooiId);
   if(!teams.length){
     body.innerHTML = `<div class="empty">${admin?'Nog geen teams aangemaakt — ga naar Toernooien beheer → Teams beheren.':'Nog geen teams ingedeeld voor dit toernooi.'}</div>`;
     return;
   }
   const perTeam = {};
-  teams.forEach(tm=>{ perTeam[tm.id] = {team:tm, perLabel:{}, totaal:0}; });
+  teams.forEach(tm=>{ perTeam[tm.id] = {team:tm, perLabel:{}, totaal:0, mPerLabel:{}, mTotaal:null}; });
   rondes.forEach(r=>{
     const label = rondeLabelKey(r);
     Object.values(perSpeler).forEach(agg=>{
@@ -4607,8 +4977,32 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
       tAgg.totaal += pl.stableford;
     });
   });
+  // Muntjes Spel: een TWEEDE, apart cijfer per team (per ronde en als eigen
+  // totaal). Wordt nooit bij de Stableford-teamscore opgeteld, gaat niet door
+  // Boost/Hidden holes, en telt ook mee als de kaart van de speler nog niet
+  // compleet is — het is een los spel. Alleen zichtbaar als er in de getoonde
+  // rondes minstens één ronde met het Muntjes Spel zit.
+  const toonMuntjes = muntjesRondes.length>0;
+  const muntLabels = new Set(muntjesRondes.map(rondeLabelKey));
+  const mRondeMap = {}; muntjesRondes.forEach(r=>mRondeMap[r.id]=r);
+  muntjesRijen.forEach(m=>{
+    const r = mRondeMap[m.ronde_id];
+    if(!r || m.waarde==null) return;
+    const teamId = effectiefTeamId(m.speler_id, r.id, toernooiId);
+    if(!teamId || !perTeam[teamId]) return;
+    const tAgg = perTeam[teamId], label = rondeLabelKey(r);
+    tAgg.mPerLabel[label] = (tAgg.mPerLabel[label]==null ? 0 : tAgg.mPerLabel[label]) + m.waarde;
+    tAgg.mTotaal = (tAgg.mTotaal==null ? 0 : tAgg.mTotaal) + m.waarde;
+  });
+  const sortMuntjes = toonMuntjes && klsSortLabel===KLS_SORT_MUNTJES;
   const sortLabelActief = klsSortLabel && labels.includes(klsSortLabel) ? klsSortLabel : null;
   const teamRows = Object.values(perTeam).sort((a,b)=>{
+    if(sortMuntjes){
+      if(a.mTotaal==null && b.mTotaal==null) return b.totaal-a.totaal;
+      if(a.mTotaal==null) return 1;
+      if(b.mTotaal==null) return -1;
+      return b.mTotaal-a.mTotaal || b.totaal-a.totaal;
+    }
     if(sortLabelActief){
       const va = a.perLabel[sortLabelActief], vb = b.perLabel[sortLabelActief];
       if(va==null && vb==null) return 0;
@@ -4627,22 +5021,27 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     <th style="width:38px;vertical-align:top">#</th><th style="width:${teamBreedte}px;vertical-align:top">Team</th>
     ${labels.map(l=>{
       const r0 = rondes.find(r=>rondeLabelKey(r)===l);
-      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l);
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, muntLabels.has(l)?'Stableford / Muntjes':'');
     }).join('')}
-    <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
+    ${toonMuntjes
+      ? `<th class="kls-tot-stb" data-pdf="Stableford" onclick="klsSorteerOpTotaal()" title="Sorteer op Stableford-totaal" style="text-align:center;vertical-align:top;white-space:normal;cursor:pointer;${(!sortLabelActief && !sortMuntjes)?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}"><span class="kls-lang">Stableford</span><span class="kls-kort">STB</span></th>
+    <th class="kls-tot-munt" data-pdf="Muntjes" onclick="klsSorteerOpRonde('${KLS_SORT_MUNTJES}')" title="Sorteer op muntjestotaal" style="text-align:center;vertical-align:top;white-space:normal;cursor:pointer;${sortMuntjes?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Muntjes</th>`
+      : `<th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>`}
   </tr></thead><tbody>
   ${teamRows.map((tAgg,i)=>{
     const rb = i===0?'r1':i===1?'r2':i===2?'r3':'ro';
     return `<tr>
       <td><span class="rb ${rb}">${i+1}</span></td>
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${tAgg.team.kleur};margin-right:6px;vertical-align:middle"></span><b>${esc(tAgg.team.naam)}</b></td>
-      ${labels.map(l=>`<td style="text-align:center">${tAgg.perLabel[l]!=null?fmtPts(tAgg.perLabel[l]):'<span style="color:var(--tl)">—</span>'}</td>`).join('')}
-      <td style="text-align:center"><b style="color:var(--gd)">${fmtPts(tAgg.totaal)}</b></td>
+      ${labels.map(l=>`<td style="text-align:center">${tAgg.perLabel[l]!=null?fmtPts(tAgg.perLabel[l]):'<span style="color:var(--tl)">—</span>'}${muntLabels.has(l)?`<span class="kls-munt">${fmtMunt(tAgg.mPerLabel[l]==null?null:tAgg.mPerLabel[l])}</span>`:''}</td>`).join('')}
+      <td${toonMuntjes?' class="kls-tot"':''} style="text-align:center"><b style="color:var(--gd)">${fmtPts(tAgg.totaal)}</b></td>
+      ${toonMuntjes?`<td class="kls-tot" style="text-align:center"><b class="kls-munt-tot">${fmtMunt(tAgg.mTotaal)}</b></td>`:''}
     </tr>`;
   }).join('')}
   </tbody></table></div>
   <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:8px">Teamscore = som van de netto Stableford-punten van de teamleden per ronde. Hoogste totaal wint.</p>
-  <p style="font-size:.68rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Tik op een ronde-kolom om alleen op die ronde te sorteren, of op "Totaal" om terug te gaan.</p>
+  ${toonMuntjes?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Het kleine cijfer met het muntje is het muntjestotaal van het team in die ronde. Muntjes zijn een apart spel: ze staan in hun eigen totaalkolom en tellen niet mee in de Stableford-teamscore (STB). Tik op "Muntjes" om daarop te sorteren.</p>`:''}
+  <p style="font-size:.68rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Tik op een ronde-kolom om alleen op die ronde te sorteren, of op ${toonMuntjes?'het Stableford-totaal':'"Totaal"'} om terug te gaan.</p>
   `;
 }
 
