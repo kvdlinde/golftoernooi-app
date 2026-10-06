@@ -172,7 +172,7 @@ tr:last-child td{border-bottom:none}
 .sc-head{font-family:'Inter',sans-serif;font-size:.82rem;font-weight:700;color:var(--gd);text-align:center;padding:3px 1px 6px;border-bottom:2px solid var(--gd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-head.me{color:var(--gold);border-bottom-color:var(--gold)}
 /* Vinkje waarmee je kiest of je (ook) voor déze medespeler invoert — zie
-   scToggleMedespelerInvoer. Een niet-aangevinkte medespeler-kolom is gedimd
+   scToggleMedespelerInvoer (meerdere tegelijk mogelijk). Een niet-aangevinkte medespeler-kolom is gedimd
    en niet-invoerbaar, alleen tijdens live invoer (niet meer in een gesloten/
    read-only ronde — daar blijft alles gewoon zichtbaar). */
 .sc-head-dim{opacity:.5}
@@ -217,6 +217,10 @@ tr:last-child td{border-bottom:none}
 .sc-munt{width:100%;max-width:66px;height:38px;text-align:center;text-align-last:center;font-family:'IBM Plex Mono',monospace;font-size:1.05rem;font-weight:700;border:2px solid var(--gold);border-radius:6px;background:#fff8e1;color:var(--td);padding:0 2px;-webkit-appearance:none;appearance:none}
 .sc-munt:focus{outline:none;border-color:var(--gl);background:#fff}
 .sc-munt:disabled{opacity:.65}
+/* "telt X": de waarde waarmee een ronde in het TOTAAL meetelt, als die afwijkt
+   van de ronde-uitslag erboven (scoring alleen voor de ronde, klassement
+   regulier — zie rondeKlassementRegulier). */
+.kls-telt{display:block;font-family:'Inter',sans-serif;font-size:.68rem;font-weight:600;color:var(--tl);line-height:1.25;margin-top:1px;white-space:nowrap}
 /* Muntjescijfer in het klassement: bewust kleiner en in een eigen kleur, zodat
    het nooit voor een Stableford-cijfer wordt aangezien. */
 .kls-munt{display:block;font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:600;color:#8a6d1c;line-height:1.25;margin-top:1px;white-space:nowrap}
@@ -428,7 +432,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.35.0';
+const APP_VERSION = '1.37.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -840,12 +844,30 @@ alter table ronde_flights add column if not exists start_hole int;
 -- toonde, zodat bestaande toernooien er niet anders uit gaan zien.
 alter table toernooi_rondes add column if not exists scoring_types jsonb not null default '["stableford","abs-netto","abs-bruto"]'::jsonb;
 
+-- Handicap per kaart vastleggen. Een kaart waarvan de handicap 'vast' staat,
+-- verandert niet meer als de handicap van de speler later wijzigt: niet bij
+-- heropenen + opnieuw sluiten van de ronde, niet als de admin de kaart opnieuw
+-- opslaat. exact_hcp = de exacte handicap waarmee de kaart is vastgelegd (leeg
+-- bij kaarten die al vóór deze uitbreiding in een gesloten ronde zaten: daar
+-- is alleen de playing handicap bewaard, en die blijft dan staan).
+alter table scores add column if not exists exact_hcp numeric(4,1);
+alter table scores add column if not exists hcp_vast boolean not null default false;
+-- Bestaande kaarten in rondes die al gesloten zijn: vastleggen zoals ze nu zijn.
+update scores set hcp_vast = true
+  where hcp_vast = false and tee_id is not null
+    and ronde_id in (select id from toernooi_rondes where status = 'gesloten');
+
 -- Muntjes Spel: per ronde aan/uit te zetten. Iedere speler vult aan het einde
 -- van de ronde zelf zijn muntjestotaal in (-9 t/m +9). Bewust een EIGEN tabel,
 -- los van 'scores': Boost, Hidden holes en de andere spelvormen rekenen
 -- uitsluitend op 'scores' en kunnen de muntjes dus niet beinvloeden. Geen rij
 -- voor een speler = nog niet ingevuld (0 is een echte score).
 alter table toernooi_rondes add column if not exists muntjes boolean not null default false;
+-- Afwijkende scoring (2x3/5x4/2x5 of Hidden holes) alleen voor de RONDE-uitslag
+-- laten gelden: true = in het klassement-totaal telt deze ronde als een gewone,
+-- reguliere Stableford-ronde. false (standaard) = zoals het altijd was: de
+-- gekozen scoring telt ook voor het klassement.
+alter table toernooi_rondes add column if not exists klassement_regulier boolean not null default false;
 create table if not exists muntjes_scores (
   id uuid default gen_random_uuid() primary key,
   ronde_id uuid not null references toernooi_rondes(id) on delete cascade,
@@ -1828,6 +1850,55 @@ async function verwijderTee(id){
    ========================================================= */
 // holeScores: array van 18 (int of null), holes: array van 18 {par,si}, pH: playing handicap
 // Geeft {bruto,netto,stableford,birdies_netto,eagles_netto,birdies_bruto,eagles_bruto,compleet}
+/* ---------- HANDICAP PER KAART VASTLEGGEN ----------
+   Een speler heeft één exacte handicap, en die kan tussen rondes wijzigen.
+   Een kaart die al gespeeld is, mag daar niet achteraf door veranderen. Een
+   kaart krijgt daarom een 'vaste' handicap (scores.hcp_vast = true) op twee
+   momenten:
+   1) bij het SLUITEN van de ronde (herberekenRondeScores) — alle kaarten
+      van die ronde;
+   2) als de handicap van de speler wordt GEWIJZIGD terwijl hij een al
+      afgeronde kaart heeft in een ronde die nog open staat
+      (legAfgerondeKaartenVast) — die kaart houdt de oude handicap.
+   Een kaart die nog niet af is in een open ronde volgt gewoon de actuele
+   handicap van de speler, zoals altijd.
+   Daarna rekent alles met de handicap van de KAART (kaartHcp) in plaats van
+   met de actuele handicap van de speler. Alleen de admin kan dat per kaart
+   bewust overrulen (scPasHuidigeHcpToe).
+   Zonder de kolommen (migratie nog niet gedraaid) is geen enkele kaart 'vast'
+   en werkt alles zoals voorheen. */
+// Bestaat de kolom 'hcp_vast' al? Af te lezen aan een volledig opgehaalde
+// scores-rij — zo is er nooit een verzoek nodig dat op een ontbrekende kolom
+// kan stuklopen.
+function scoreKentHcpVast(score){ return !!score && Object.prototype.hasOwnProperty.call(score, 'hcp_vast'); }
+// Met welke handicap rekent deze kaart? Geeft {pH, exact, vast}:
+// - niet vast            → de actuele exacte handicap van de speler;
+// - vast, exact bekend   → die vastgelegde exacte handicap (tee- of
+//                          allowance-correcties werken dus nog wel door);
+// - vast, exact onbekend → kaart is vastgelegd toen de ronde al gesloten was
+//                          bij de migratie: de bewaarde playing handicap
+//                          blijft staan zolang de tee dezelfde is.
+function kaartHcp(score, speler, tee, allowancePct){
+  const actueel = { pH: tee ? playingHandicap(speler.exact_hcp, tee, allowancePct) : null, exact: speler.exact_hcp, vast: false };
+  if(!score || score.hcp_vast!==true) return actueel;
+  if(score.exact_hcp!=null){
+    const ex = Number(score.exact_hcp);
+    return { pH: tee ? playingHandicap(ex, tee, allowancePct) : null, exact: ex, vast: true };
+  }
+  if(tee && score.tee_id===tee.id && score.playing_hcp!=null) return { pH: score.playing_hcp, exact: null, vast: true };
+  // Vast, maar zonder bewaarde exacte handicap én met een andere tee dan
+  // waarmee is vastgelegd: er valt niets terug te rekenen — dan de actuele.
+  return actueel;
+}
+// Wordt aangeroepen vlak VOORDAT de handicap van een speler wijzigt: legt al
+// zijn afgeronde kaarten die nog niet vast staan (dus in rondes die nog open
+// zijn) vast op de OUDE handicap. Geeft de namen van die rondes terug.
+async function legAfgerondeKaartenVast(spelerId, oudeHcp){
+  const kaarten = await sbG('scores','speler_id=eq.'+spelerId) || [];
+  const teDoen = kaarten.filter(k=>scoreKentHcpVast(k) && k.hcp_vast!==true && k.stableford!=null && k.tee_id);
+  for(const k of teDoen) await sbPa('scores', k.id, {hcp_vast:true, exact_hcp:oudeHcp});
+  return teDoen.map(k=>{ const r = rondeById(k.ronde_id); return r ? r.naam : 'een ronde'; });
+}
 function berekenScore(holeScores, holes, pH){
   let bruto=0, sf=0, compleet=true;
   let bN=0, eN=0, bB=0, eB=0;
@@ -2384,6 +2455,10 @@ const SPELVORM_OPTS = [
   {v:'hidden_holes', l:'Hidden holes (zelf holes kiezen)'}
 ];
 const BOOST_OPTS = [25,50,75,100,125,150,175,200];
+// Scorings waarbij de admin kan kiezen of ze ook voor het klassement gelden of
+// alleen voor de ronde-uitslag (zie verversRondeSpelvormUI en
+// rondeKlassementRegulier).
+const RONDE_SCORING_MET_KEUZE = ['2x3_5x4_2x5','hidden_holes'];
 // Scoringstypes die per ronde aan-/uitgezet kunnen worden. Bepaalt welke
 // klassement-tabbladen voor het toernooi verschijnen (zie actieveScoringTypes
 // en renderKlassementPanel) — los van "Scoring" (SPELVORM_OPTS hierboven),
@@ -2407,6 +2482,7 @@ function openRondeModal(toernooiId, rondeId){
   const volgorde = r ? r.volgorde : (allRondes.filter(x=>x.toernooi_id===toernooiId).length+1);
   const boostActief = !!(r && r.boost_pct && r.boost_pct!==100);
   window._rnBoost = boostActief ? r.boost_pct : 150;
+  window._rnKlsRegulier = !!(r && r.klassement_regulier===true);
   const spelvormWaarde = boostActief ? 'boost' : ((r && r.spelvorm) || 'regulier');
   const geselecteerdeScoringTypes = window._rnScoringTypes;
   openModalHtml('moRonde', `
@@ -2435,6 +2511,7 @@ function openRondeModal(toernooiId, rondeId){
         <option value="boost" ${spelvormWaarde==='boost'?'selected':''}>Boost (extra of minder laten meetellen)</option>
       </select>
       <div id="rnSpelvormExtra"></div>
+      <div id="rnKlassementExtra"></div>
     </div>
     <div class="fg">
       <label>Extra spel <span class="hint">staat los van de scoring hierboven — Boost en Hidden holes hebben er geen invloed op</span></label>
@@ -2464,6 +2541,21 @@ function verversRondeSpelvormUI(){
   const el = document.getElementById('rnSpelvormExtra');
   if(!spelvormEl || !el) return;
   const spelvormWaarde = spelvormEl.value;
+  // Alleen bij een scoring die de UITSLAG van de ronde verandert (2x3/5x4/2x5
+  // of Hidden holes) valt er iets te kiezen: geldt die scoring ook voor het
+  // klassement, of alleen voor de ronde-uitslag? Bij Regulier is er geen
+  // verschil. Bij Boost ook niet: Boost verandert de volgorde binnen de ronde
+  // niet, het bepaalt juist alleen hoe zwaar de ronde in het klassement telt.
+  const klsEl = document.getElementById('rnKlassementExtra');
+  if(klsEl){
+    klsEl.innerHTML = RONDE_SCORING_MET_KEUZE.includes(spelvormWaarde)
+      ? `<label style="margin-top:10px;display:block">Telt voor het klassement <span class="hint">de ronde-uitslag volgt altijd de scoring hierboven</span></label>
+      <select id="rnKlassementTelling" onchange="window._rnKlsRegulier=(this.value==='regulier')">
+        <option value="spelvorm" ${window._rnKlsRegulier?'':'selected'}>Met deze scoring (zelfde punten als de ronde-uitslag)</option>
+        <option value="regulier" ${window._rnKlsRegulier?'selected':''}>Als Regulier (de volledige Stableford-score)</option>
+      </select>`
+      : '';
+  }
   if(spelvormWaarde === 'boost'){
     const huidige = window._rnBoost || 150;
     el.innerHTML = `<label>Boost-percentage <span class="hint">laat deze ronde voor meer of minder dan 1x meetellen in het klassement</span></label>
@@ -2511,20 +2603,30 @@ async function saveRonde(toernooiId, id){
   const uitgebreid = {...basis, spelvorm, boost_pct, hidden_holes, scoring_types};
   const muntjesEl = document.getElementById('rnMuntjes');
   const muntjes = !!(muntjesEl && muntjesEl.checked);
-  let muntjesNietOpgeslagen = false;
+  const klassement_regulier = RONDE_SCORING_MET_KEUZE.includes(spelvorm) && window._rnKlsRegulier===true;
+  let muntjesNietOpgeslagen = false, klsKeuzeNietOpgeslagen = false;
+  const schrijf = async (velden)=>{
+    if(id) await sbPa('toernooi_rondes', id, velden);
+    else await sbP('toernooi_rondes', {toernooi_id:toernooiId, ...velden});
+  };
   try{
     try{
+      // Vangnetten voor kolommen uit de nieuwste migraties: bestaat
+      // 'klassement_regulier' (v1.36.0) of 'muntjes' (v1.35.0) nog niet in de
+      // database, sla de ronde dan op zónder dat veld — zodat alles wat al
+      // werkte (spelvorm/boost/scoring, en zo mogelijk het Muntjes Spel)
+      // gewoon blijft werken.
       try{
-        if(id) await sbPa('toernooi_rondes', id, {...uitgebreid, muntjes});
-        else await sbP('toernooi_rondes', {toernooi_id:toernooiId, ...uitgebreid, muntjes});
-      }catch(eMunt){
-        // Vangnet specifiek voor het Muntjes Spel: bestaat alleen de kolom
-        // 'muntjes' nog niet (nieuwste migratie nog niet gedraaid), sla dan
-        // de ronde op zónder dat veld — zodat spelvorm/boost/scoring gewoon
-        // blijven werken zoals ze deden.
-        if(id) await sbPa('toernooi_rondes', id, uitgebreid);
-        else await sbP('toernooi_rondes', {toernooi_id:toernooiId, ...uitgebreid});
-        muntjesNietOpgeslagen = muntjes;
+        await schrijf({...uitgebreid, muntjes, klassement_regulier});
+      }catch(eKls){
+        try{
+          await schrijf({...uitgebreid, muntjes});
+          klsKeuzeNietOpgeslagen = klassement_regulier;
+        }catch(eMunt){
+          await schrijf(uitgebreid);
+          muntjesNietOpgeslagen = muntjes;
+          klsKeuzeNietOpgeslagen = klassement_regulier;
+        }
       }
     }catch(e){
       // Vangnet: de kolommen spelvorm/hidden_holes/boost_pct/scoring_types
@@ -2540,6 +2642,7 @@ async function saveRonde(toernooiId, id){
     }
     closeModal('moRonde');
     if(muntjesNietOpgeslagen) toast('Ronde opgeslagen — het Muntjes Spel werkt pas na het uitvoeren van de nieuwe SQL-migratie', true);
+    else if(klsKeuzeNietOpgeslagen) toast('Ronde opgeslagen — de keuze "telt voor het klassement als Regulier" werkt pas na het uitvoeren van de nieuwe SQL-migratie', true);
     else toast('Ronde opgeslagen');
     await laadAlles(); renderBeheerToernooienPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
@@ -2550,11 +2653,16 @@ async function verwijderRonde(id){
   catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
 }
 // Rekent alle opgeslagen scores van een ronde opnieuw door met de actuele
-// tee-, handicap- en hole-gegevens, en overschrijft afwijkende waarden.
+// tee- en hole-gegevens, en overschrijft afwijkende waarden.
 // Voorkomt dat een kaart een verouderd (stale) stableford-totaal blijft tonen
-// nadat er ná het invoeren nog iets aan tees, holes of handicaps is gecorrigeerd.
+// nadat er ná het invoeren nog iets aan tees of holes is gecorrigeerd.
 // Wordt aangeroepen bij het sluiten van een ronde — ook als die ronde eerder
 // al eens gesloten en weer heropend is, dus elke sluiting rekent opnieuw na.
+// HANDICAP: een kaart die nog niet vast staat, wordt doorgerekend met de
+// actuele handicap van de speler en daarna vastgelegd. Een kaart die al vast
+// staat (eerder gesloten, of vastgelegd bij een handicapwijziging) houdt zijn
+// eigen handicap — een latere wijziging van de spelershandicap verandert een
+// eenmaal gesloten ronde dus niet meer. Zie kaartHcp.
 async function herberekenRondeScores(rondeId){
   const ronde = rondeById(rondeId);
   if(!ronde) return 0;
@@ -2571,20 +2679,25 @@ async function herberekenRondeScores(rondeId){
     const tee = teeById(score.tee_id);
     const speler = allSpelers.find(s=>s.id===score.speler_id);
     if(!tee || !speler) continue;
-    const freshPH = playingHandicap(speler.exact_hcp, tee, toernooi.allowance_pct);
+    const hcp = kaartHcp(score, speler, tee, toernooi.allowance_pct);
+    const freshPH = hcp.pH;
     const uitkomst = berekenScore(score.hole_scores, holes, freshPH);
     const gewijzigd = score.playing_hcp!==freshPH || score.stableford!==uitkomst.stableford ||
       score.bruto!==uitkomst.bruto || score.netto!==uitkomst.netto ||
       score.birdies_netto!==uitkomst.birdies_netto || score.eagles_netto!==uitkomst.eagles_netto ||
       score.birdies_bruto!==uitkomst.birdies_bruto || score.eagles_bruto!==uitkomst.eagles_bruto;
-    if(!gewijzigd) continue;
+    // Nog niet vast (en de kolom bestaat): nu vastleggen op de handicap
+    // waarmee zojuist is gerekend.
+    const vastleggen = scoreKentHcpVast(score) && score.hcp_vast!==true;
+    if(!gewijzigd && !vastleggen) continue;
     try{
       await sbPa('scores', score.id, {
         playing_hcp: freshPH, bruto: uitkomst.bruto, netto: uitkomst.netto, stableford: uitkomst.stableford,
         birdies_netto: uitkomst.birdies_netto, eagles_netto: uitkomst.eagles_netto,
-        birdies_bruto: uitkomst.birdies_bruto, eagles_bruto: uitkomst.eagles_bruto
+        birdies_bruto: uitkomst.birdies_bruto, eagles_bruto: uitkomst.eagles_bruto,
+        ...(vastleggen ? {hcp_vast:true, exact_hcp:hcp.exact} : {})
       });
-      aangepast++;
+      if(gewijzigd) aangepast++;
     }catch(e){ toast('Herberekenen mislukt voor één kaart: '+e.message, true); }
   }
   return aangepast;
@@ -2596,7 +2709,14 @@ async function sluitRonde(id){
   const muntjesWaarschuwing = zonderMuntjes.length
     ? '\n\nLet op — Muntjes Spel: '+zonderMuntjes.length+' speler(s) hebben nog geen muntjesscore ingevuld ('+zonderMuntjes.join(', ')+'). Na het sluiten kunnen zij dat niet meer zelf; jij als admin nog wel.'
     : '';
-  if(!confirm('Ronde sluiten? Alle kaarten worden eerst opnieuw doorgerekend met de actuele tee- en handicapgegevens. Deelnemers zien dan de uitslag. Zorg dat alle kaarten zijn ingevoerd.'+muntjesWaarschuwing)) return;
+  // De tekst over het vastleggen van de handicap klopt alleen als de database
+  // de bijbehorende kolommen heeft (migratie v1.37.0).
+  let hcpVastActief = false;
+  try{ const proef = await sbG('scores','ronde_id=eq.'+id+'&limit=1'); hcpVastActief = !!(proef && proef[0] && scoreKentHcpVast(proef[0])); }catch(e){}
+  const hcpTekst = hcpVastActief
+    ? 'Alle kaarten worden eerst opnieuw doorgerekend. Daarna ligt de handicap van elke kaart vast: wijzigt een handicap later, dan verandert deze ronde niet meer.'
+    : 'Alle kaarten worden eerst opnieuw doorgerekend met de actuele tee- en handicapgegevens.';
+  if(!confirm('Ronde sluiten? '+hcpTekst+' Deelnemers zien dan de uitslag. Zorg dat alle kaarten zijn ingevoerd.'+muntjesWaarschuwing)) return;
   try{
     const aangepast = await herberekenRondeScores(id);
     await sbPa('toernooi_rondes', id, {status:'gesloten'});
@@ -2783,7 +2903,7 @@ async function stlKlassementStanden(toernooiId){
   scores.forEach(s=>{
     const r = rondeMap[s.ronde_id];
     if(!r || s.stableford==null) return;
-    const eff = effectieveStablefordVoorRonde(s, r, holesVoorRonde(r));
+    const eff = klassementStablefordVoorRonde(s, r, holesVoorRonde(r));
     standen[s.speler_id] = (standen[s.speler_id]||0) + eff;
   });
   return standen;
@@ -3274,8 +3394,18 @@ async function saveSpeler(id){
   const hcp = parseFloat(document.getElementById('spHcp').value);
   if(!naam || isNaN(hcp)){ toast('Vul naam en handicap in', true); return; }
   try{
+    let vastgelegd = [], oudeHcp = null;
     if(id){
       const actief = document.getElementById('spActief').value==='1';
+      // Wijzigt de handicap? Dan eerst de al afgeronde kaarten van deze
+      // speler vastleggen op de oude handicap (zie HANDICAP PER KAART
+      // VASTLEGGEN). Niet als de oude handicap nog nooit bevestigd was: dat
+      // was een voorlopige waarde, geen handicap waarmee echt gespeeld is.
+      const oud = allSpelers.find(x=>x.id===id);
+      if(oud && oud.hcp_bevestigd===true && oud.exact_hcp!=null && Number(oud.exact_hcp)!==hcp){
+        oudeHcp = Number(oud.exact_hcp);
+        vastgelegd = await legAfgerondeKaartenVast(id, oudeHcp);
+      }
       await sbPa('spelers', id, {naam, email:email||null, exact_hcp:hcp, actief, hcp_bevestigd:true});
     } else {
       const pin = document.getElementById('spPin').value.trim();
@@ -3283,7 +3413,10 @@ async function saveSpeler(id){
       const hash = await maakHash(pin);
       await sbP('spelers', {naam, email:email||null, exact_hcp:hcp, hcp_bevestigd:true, pin_hash:hash});
     }
-    closeModal('moSpeler'); toast('Speler opgeslagen');
+    closeModal('moSpeler');
+    toast(vastgelegd.length
+      ? 'Speler opgeslagen — de al afgeronde kaart van '+vastgelegd.join(', ')+' houdt de oude handicap ('+fH(oudeHcp)+'). Anders gewenst? Open die kaart als admin.'
+      : 'Speler opgeslagen');
     await laadAlles(); renderBeheerSpelersPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
@@ -3566,9 +3699,19 @@ async function slaProfielOp(){
   const hcp = parseFloat(document.getElementById('prHcp').value);
   if(isNaN(hcp)){ toast('Vul een geldige handicap in', true); return; }
   try{
+    // Zelfde regel als bij de admin (saveSpeler): een al afgeronde kaart houdt
+    // de handicap waarmee hij gespeeld is.
+    let vastgelegd = [];
+    const oudeHcp = ingelogdSpeler.exact_hcp!=null ? Number(ingelogdSpeler.exact_hcp) : null;
+    if(ingelogdSpeler.hcp_bevestigd===true && oudeHcp!=null && oudeHcp!==hcp){
+      vastgelegd = await legAfgerondeKaartenVast(ingelogdSpeler.id, oudeHcp);
+    }
     await sbPa('spelers', ingelogdSpeler.id, {email:email||null, exact_hcp:hcp, hcp_bevestigd:true});
     ingelogdSpeler.email = email; ingelogdSpeler.exact_hcp = hcp; ingelogdSpeler.hcp_bevestigd = true;
-    toast('Profiel opgeslagen'); await laadAlles();
+    toast(vastgelegd.length
+      ? 'Profiel opgeslagen — je nieuwe handicap geldt voor nieuwe rondes. Je al afgeronde kaart van '+vastgelegd.join(', ')+' houdt handicap '+fH(oudeHcp)+'.'
+      : 'Profiel opgeslagen');
+    await laadAlles();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
 async function wijzigPincode(){
@@ -3766,14 +3909,58 @@ function holeGridHtml(holes, existing, readOnly, log, spelerId){
   }
   return rows;
 }
+// Infotekst boven de kaart als de handicap van deze kaart vast staat. De admin
+// krijgt er, als de actuele handicap van de speler afwijkt, een knop bij om
+// die bewust alsnog op deze kaart toe te passen.
+function scVasteHcpInfoHtml(hcp, speler, tee, ctx){
+  const basis = hcp.exact!=null
+    ? `Handicap van deze kaart (vastgelegd): ${fH(hcp.exact)} → playing hcp <b style="color:var(--gd)">${fPH(hcp.pH)}</b>`
+    : `Playing hcp <b style="color:var(--gd)">${fPH(hcp.pH)}</b> — vastgelegd bij het sluiten van de ronde`;
+  if(!isAdmin()) return basis;
+  const actueelPH = playingHandicap(speler.exact_hcp, tee, ctx.toernooi.allowance_pct);
+  const wijktAf = hcp.exact!=null ? Number(hcp.exact)!==Number(speler.exact_hcp) : actueelPH!==hcp.pH;
+  if(!wijktAf) return basis;
+  return basis + `<div style="margin-top:6px"><button class="btn bg bsm" onclick="scPasHuidigeHcpToe()">Huidige handicap (${fH(speler.exact_hcp)} → playing ${fPH(actueelPH)}) op deze kaart toepassen</button></div>`;
+}
+// Alleen admin: vervangt bewust de vastgelegde handicap van déze kaart door de
+// actuele handicap van de speler en rekent de kaart opnieuw door. Bedoeld
+// voor een echte correctie (de handicap bleek tijdens die ronde niet te
+// kloppen) — de kaart blijft daarna vast staan, nu op de nieuwe waarde.
+async function scPasHuidigeHcpToe(){
+  const ctx = window._scCtx;
+  if(!ctx || !isAdmin() || !ctx.existingScore) return;
+  const speler = allSpelers.find(s=>s.id===ctx.spelerId);
+  const tee = teeById(document.getElementById('scTee').value);
+  if(!speler || !tee) return;
+  const nieuwPH = playingHandicap(speler.exact_hcp, tee, ctx.toernooi.allowance_pct);
+  if(!confirm('De handicap van deze kaart vervangen door de huidige handicap van '+speler.naam+' ('+fH(speler.exact_hcp)+', playing hcp '+fPH(nieuwPH)+')? De punten van deze kaart worden opnieuw berekend.')) return;
+  try{
+    const sc = ctx.existingScore;
+    const u = berekenScore(sc.hole_scores, ctx.holes, nieuwPH);
+    await sbPa('scores', sc.id, {
+      exact_hcp: speler.exact_hcp, hcp_vast: true, tee_id: tee.id,
+      playing_hcp: nieuwPH, bruto: u.bruto, netto: u.netto, stableford: u.stableford,
+      birdies_netto: u.birdies_netto, eagles_netto: u.eagles_netto,
+      birdies_bruto: u.birdies_bruto, eagles_bruto: u.eagles_bruto,
+      updated_at: new Date().toISOString()
+    });
+    toast('Handicap van deze kaart bijgewerkt naar '+fH(speler.exact_hcp));
+    await renderScoreBody(ctx.spelerId);
+  }catch(e){ toast('Bijwerken mislukt: '+e.message, true); }
+}
 function onTeeChange(){
   const ctx = window._scCtx;
   const teeId = document.getElementById('scTee').value;
   const tee = teeId?teeById(teeId):null;
   const speler = allSpelers.find(s=>s.id===ctx.spelerId);
-  ctx.currentPH = tee ? playingHandicap(speler.exact_hcp, tee, ctx.toernooi.allowance_pct) : null;
+  // Staat de handicap van deze kaart vast, dan rekent de kaart daarmee — niet
+  // met de actuele handicap van de speler (zie kaartHcp).
+  const hcp = kaartHcp(ctx.existingScore, speler, tee, ctx.toernooi.allowance_pct);
+  ctx.currentPH = tee ? hcp.pH : null;
   const phEl = document.getElementById('scPHInfo');
-  phEl.innerHTML = tee ? `Exacte hcp ${fH(speler.exact_hcp)} → playing hcp <b style="color:var(--gd)">${fPH(ctx.currentPH)}</b>` : 'Kies een tee om je playing handicap te zien.';
+  phEl.innerHTML = !tee ? 'Kies een tee om je playing handicap te zien.'
+    : !hcp.vast ? `Exacte hcp ${fH(speler.exact_hcp)} → playing hcp <b style="color:var(--gd)">${fPH(ctx.currentPH)}</b>`
+    : scVasteHcpInfoHtml(hcp, speler, tee, ctx);
   const noTeeMsg = document.getElementById('scNoTeeMsg'), entryArea = document.getElementById('scEntryArea');
   if(noTeeMsg && entryArea){
     noTeeMsg.style.display = teeId ? 'none' : '';
@@ -3975,44 +4162,48 @@ function scPuntenVoor(ctx, subjectId, holeIndex, waarde){
   return sfp(waarde, h.par, shots(pH, h.si));
 }
 function scPtKlasse(p){ return p==null ? '' : ' pt-'+Math.min(p,4); }
-// Sleutel waaronder we (per ronde + speler) onthouden voor welke ÉÉN
-// medespeler je, naast jezelf, ook scores invoert op de gedeelde scorekaart
+// Sleutel waaronder we (per ronde + speler) onthouden voor welke
+// medespelers je, naast jezelf, ook scores invoert op de gedeelde scorekaart
 // — zie scToggleMedespelerInvoer. Nooit gedeeld tussen rondes of spelers.
 function scActieveMedespelerKey(ctx){ return 'scMedeInvoer_'+ctx.rondeId+'_'+ctx.spelerId; }
-// Welke kolomindex (binnen ctx.kolomSpelers) momenteel is aangevinkt om ook
-// voor in te voeren — null als niemand is aangevinkt (dan voer je alleen je
-// eigen score in). Kolom 0 (jijzelf) kan hier nooit uitkomen: die is altijd
-// al actief en heeft geen vinkje nodig.
-function scActieveMedespelerKolom(ctx){
+// Welke kolomindexen (binnen ctx.kolomSpelers) momenteel zijn aangevinkt om
+// ook voor in te voeren, oplopend — leeg als niemand is aangevinkt (dan voer
+// je alleen je eigen score in). Kolom 0 (jijzelf) zit hier nooit in: die is
+// altijd al actief en heeft geen vinkje nodig. Je kunt ALLE medespelers
+// tegelijk aanvinken (sinds v1.36.0; daarvoor hooguit één). Een keuze die
+// nog in de oude vorm is onthouden (één los getal) wordt gewoon gelezen.
+function scActieveMedespelerKolommen(ctx){
   let raw;
-  try{ raw = localStorage.getItem(scActieveMedespelerKey(ctx)); }catch(e){ return null; }
-  if(raw==null) return null;
-  const idx = parseInt(raw,10);
+  try{ raw = localStorage.getItem(scActieveMedespelerKey(ctx)); }catch(e){ return []; }
+  if(raw==null || raw==='') return [];
+  let lijst;
+  try{ const p = JSON.parse(raw); lijst = Array.isArray(p) ? p : [p]; }catch(e){ lijst = [raw]; }
   const n = (ctx.kolomSpelers||[]).length;
-  return (!isNaN(idx) && idx>0 && idx<n) ? idx : null;
+  const geldig = lijst.map(x=>parseInt(x,10)).filter(idx=>!isNaN(idx) && idx>0 && idx<n);
+  return Array.from(new Set(geldig)).sort((a,b)=>a-b);
 }
 // Aan/uitvinken van "ook invoeren voor deze medespeler" op de gedeelde
-// scorekaart. Er wordt maar één kolomindex onthouden, dus een nieuwe
-// medespeler aanvinken vervangt vanzelf een eerder aangevinkte — precies
-// de bedoeling bij een vierbal: jezelf, plus hooguit één ander tegelijk.
+// scorekaart. Elk vinkje staat op zichzelf: een tweede (of derde)
+// medespeler aanvinken laat de eerder aangevinkte gewoon aan staan.
 function scToggleMedespelerInvoer(ci){
   const ctx = window._scCtx;
   if(!ctx) return;
   const key = scActieveMedespelerKey(ctx);
   try{
-    if(scActieveMedespelerKolom(ctx)===ci) localStorage.removeItem(key);
-    else localStorage.setItem(key, String(ci));
+    const huidig = scActieveMedespelerKolommen(ctx);
+    const nieuw = huidig.includes(ci) ? huidig.filter(x=>x!==ci) : huidig.concat(ci).sort((a,b)=>a-b);
+    if(nieuw.length) localStorage.setItem(key, JSON.stringify(nieuw));
+    else localStorage.removeItem(key);
   }catch(e){ /* localStorage niet beschikbaar (bv. privénavigatie) — vinkje werkt dan alleen voor deze render */ }
   const grid = document.getElementById('scGrid');
   if(grid) grid.innerHTML = scoreGridHtml(ctx);
 }
 // Kolomindexen die nu daadwerkelijk invoerbaar zijn: altijd je eigen kolom
-// (0), plus de eventueel aangevinkte medespeler-kolom — in die volgorde,
-// want dat bepaalt ook de spring-volgorde na een invoer (zie
-// naarVolgendeGridHole hieronder).
+// (0), plus alle aangevinkte medespeler-kolommen, van links naar rechts —
+// in die volgorde, want dat bepaalt ook de spring-volgorde na een invoer
+// (zie naarVolgendeGridHole hieronder).
 function scActieveKolommen(ctx){
-  const gekozen = scActieveMedespelerKolom(ctx);
-  return gekozen!=null ? [0, gekozen] : [0];
+  return [0].concat(scActieveMedespelerKolommen(ctx));
 }
 function scoreGridHtml(ctx){
   const kolomSpelers = ctx.kolomSpelers || [ctx.spelerId];
@@ -4333,10 +4524,11 @@ function scGridHerrenderCel(subjectId, holeIndex){
 // Springt na een geldige invoer naar de volgende ACTIEVE kolom op dezelfde
 // hole (scActieveKolommen): standaard alleen jouw eigen kolom, dus dan
 // spring je gewoon naar beneden, naar jouw kolom van de volgende hole. Heb
-// je (via het vinkje) ook één medespeler geselecteerd, dan spring je eerst
-// naar RECHTS naar diens kolom, en pas daarna naar beneden naar jouw kolom
-// van de volgende hole. Zo tik je per hole eerst je eigen score in, en
-// optioneel meteen die van de ene medespeler voor wie je ook invoert.
+// je (via de vinkjes) ook een of meer medespelers geselecteerd, dan spring
+// je eerst naar RECHTS, kolom voor kolom langs iedere aangevinkte
+// medespeler, en pas daarna naar beneden naar jouw kolom van de volgende
+// hole. Zo tik je per hole eerst je eigen score in, en daarna meteen die
+// van iedereen voor wie je ook invoert.
 function naarVolgendeGridHole(ci, i, aantalHoles){
   const ctx = window._scCtx;
   const kolommen = scActieveKolommen(ctx);
@@ -4596,6 +4788,24 @@ function effectieveStablefordVoorRonde(score, ronde, holes){
   // Afgerond op halve punten — boost-percentages als 150%/25% geven anders lelijke decimalen.
   return Math.round(basis * (boost/100) * 2) / 2;
 }
+// Scoring alleen voor de RONDE-uitslag: true als voor deze ronde een
+// afwijkende scoring (2x3/5x4/2x5 of Hidden holes) is gekozen én de admin heeft
+// aangegeven dat de ronde voor het klassement als Regulier moet tellen. De
+// rondekolom toont dan de uitslag volgens de afwijkende scoring; in het
+// totaal telt de volledige, reguliere Stableford-score.
+function rondeKlassementRegulier(ronde){
+  return !!(ronde && ronde.klassement_regulier===true && RONDE_SCORING_MET_KEUZE.includes(ronde.spelvorm||'regulier'));
+}
+// Het aantal Stableford-punten waarmee een kaart meetelt in het klassement-
+// TOTAAL. Normaal gelijk aan de ronde-uitslag (effectieveStablefordVoorRonde);
+// alleen bij rondeKlassementRegulier de volledige reguliere score (met de
+// boost-factor, mocht die er ooit naast staan).
+function klassementStablefordVoorRonde(score, ronde, holes){
+  if(!rondeKlassementRegulier(ronde)) return effectieveStablefordVoorRonde(score, ronde, holes);
+  if(score.stableford==null) return null;
+  const boost = ronde.boost_pct || 100;
+  return Math.round(score.stableford * (boost/100) * 2) / 2;
+}
 // Leesbaar label voor de kolomkop in het klassement, bv. "Hidden Holes · Boost 150%".
 function spelvormLabel(ronde){
   if(!ronde) return '';
@@ -4729,12 +4939,15 @@ function exporteerKlassementPdf(){
     // Teams met het Muntjes Spel: een ronde-cel bevat dan twee cijfers
     // (Stableford en, kleiner, muntjes). Op het scherm onderscheidt de opmaak
     // die twee; in de PDF zetten we er een schuine streep tussen.
+    // Idem voor "telt X" (ronde-uitslag wijkt af van de klassementtelling):
+    // dat komt er tussen haakjes achter.
     const celTekst = (td)=>{
-      const munt = td.querySelector('.kls-munt');
-      if(!munt) return td.innerText.replace(/\s+/g,' ').trim();
+      const munt = td.querySelector('.kls-munt'), telt = td.querySelector('.kls-telt');
+      if(!munt && !telt) return td.innerText.replace(/\s+/g,' ').trim();
+      const plat = (el)=> el.textContent.replace(/\s+/g,' ').trim();
       const kloon = td.cloneNode(true);
-      kloon.querySelector('.kls-munt').remove();
-      return kloon.textContent.replace(/\s+/g,' ').trim() + ' / ' + munt.textContent.replace(/\s+/g,' ').trim();
+      kloon.querySelectorAll('.kls-munt,.kls-telt').forEach(el=>el.remove());
+      return plat(kloon) + (telt ? ' ('+plat(telt)+')' : '') + (munt ? ' / '+plat(munt) : '');
     };
     const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr=>Array.from(tr.querySelectorAll('td')).map(celTekst));
     doc.autoTable({
@@ -4791,7 +5004,7 @@ function klsKolomHeaderHtml(key, displayText, r0, toonSpelvormen, sorteerbaar, a
   const kEsc = String(key).replace(/'/g,"\\'").replace(/"/g,'&quot;');
   const klikAttr = sorteerbaar ? ` onclick="klsSorteerOpRonde('${kEsc}')" title="Sorteer op deze ronde"` : '';
   const extraStyle = sorteerbaar ? `cursor:pointer;${actief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}` : '';
-  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(displayText)}px;white-space:normal;line-height:1;${extraStyle}">${esc(displayText)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}${extraSub?sub(extraSub):''}</th>`;
+  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(displayText)}px;white-space:normal;line-height:1;${extraStyle}">${esc(displayText)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}${[].concat(extraSub||[]).filter(Boolean).map(sub).join('')}</th>`;
 }
 // Numerieke waarde van één ronde-cel voor een gegeven klassement-mode —
 // dezelfde onderliggende getallen als de cel()/totaal()-weergave in
@@ -4830,6 +5043,10 @@ async function tekenKlassementBody(toernooiId, mode){
   const liveLabels = new Set();
   rondes.forEach(r=>{ if(r.status==='open') liveLabels.add(rondeLabelKey(r)); });
 
+  // Kolommen waarin de ronde-uitslag en de klassementtelling uiteenlopen
+  // (scoring alleen voor de ronde, klassement regulier).
+  const klsRegLabels = new Set(rondes.filter(rondeKlassementRegulier).map(rondeLabelKey));
+
   // Muntjes Spel: alleen ophalen voor de twee subtabs die het tonen. Komt uit
   // een eigen tabel en gaat nergens door de Stableford-berekening hieronder.
   const muntjesRondes = rondes.filter(rondeHeeftMuntjes);
@@ -4849,15 +5066,19 @@ async function tekenKlassementBody(toernooiId, mode){
     const label = rondeLabelKey(r);
     if(!perSpeler[s.speler_id]) perSpeler[s.speler_id] = {speler_id:s.speler_id, perLabel:{}, totStableford:0, totAbsBruto:0, totAbsNetto:0, totStrokeplayBruto:0, totStrokeplayNetto:0, totBirdiesBruto:0, totEaglesBruto:0, aantalRondes:0, laatsteScore:null};
     const agg = perSpeler[s.speler_id];
-    if(!agg.perLabel[label]) agg.perLabel[label] = {compleet:false, stableford:0, absBruto:0, absNetto:0, strokeplayBruto:0, strokeplayNetto:0, birdies_bruto:0, eagles_bruto:0, scoreIds:[]};
+    if(!agg.perLabel[label]) agg.perLabel[label] = {compleet:false, stableford:0, klassement:0, absBruto:0, absNetto:0, strokeplayBruto:0, strokeplayNetto:0, birdies_bruto:0, eagles_bruto:0, scoreIds:[]};
     const pl = agg.perLabel[label];
     pl.scoreIds.push(s.id);
     pl.birdies_bruto += s.birdies_bruto||0; pl.eagles_bruto += s.eagles_bruto||0;
     agg.totBirdiesBruto += s.birdies_bruto||0; agg.totEaglesBruto += s.eagles_bruto||0;
     if(s.stableford!=null){
       pl.compleet = true;
+      // pl.stableford = de ronde-uitslag (wat in de kolom staat, en waarop je
+      // per ronde sorteert); pl.klassement = waarmee de ronde in het totaal
+      // telt. Die twee verschillen alleen bij rondeKlassementRegulier.
       const eff = effectieveStablefordVoorRonde(s, r, holesVoorRonde(r));
-      pl.stableford += eff; agg.totStableford += eff; agg.aantalRondes++;
+      const kls = klassementStablefordVoorRonde(s, r, holesVoorRonde(r));
+      pl.stableford += eff; pl.klassement += kls; agg.totStableford += kls; agg.aantalRondes++;
       const abs = absStrokeplayVoorScore(s, holesVoorRonde(r));
       if(abs){ pl.absBruto += abs.bruto; pl.absNetto += abs.netto; agg.totAbsBruto += abs.bruto; agg.totAbsNetto += abs.netto; }
       pl.strokeplayBruto += s.bruto||0; pl.strokeplayNetto += s.netto||0;
@@ -4869,7 +5090,7 @@ async function tekenKlassementBody(toernooiId, mode){
   // (Teams met al ingevulde muntjes mag wél door: die tellen ook zonder complete kaart.)
   if(!rows.length && !(mode==='teams' && muntjesRijen.length)){ body.innerHTML = `<div class="empty">${admin?'Nog geen scores ingevoerd.':'Nog geen volledige kaarten in gesloten rondes.'}</div>`; return; }
 
-  if(mode==='teams'){ renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin, muntjesRondes, muntjesRijen); return; }
+  if(mode==='teams'){ renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin, muntjesRondes, muntjesRijen, klsRegLabels); return; }
 
   const sortLabelActief = klsSortLabel && labels.includes(klsSortLabel) ? klsSortLabel : null;
   if(sortLabelActief){
@@ -4891,10 +5112,10 @@ async function tekenKlassementBody(toernooiId, mode){
   else if(mode==='strokeplay-bruto') rows.sort((a,b)=> a.totStrokeplayBruto-b.totStrokeplayBruto || countbackCompareBruto(a,b));
   else if(mode==='birdie-bruto') rows.sort((a,b)=> (b.totBirdiesBruto+b.totEaglesBruto)-(a.totBirdiesBruto+a.totEaglesBruto) || b.totEaglesBruto-a.totEaglesBruto);
 
-  function cel(pl){
+  function cel(pl, label){
     if(!pl) return '<span style="color:var(--tl)">—</span>';
     if(!pl.compleet) return '<span style="color:var(--tl)">bezig</span>';
-    if(mode==='stableford') return fmtPts(pl.stableford);
+    if(mode==='stableford') return fmtPts(pl.stableford) + (klsRegLabels.has(label) ? `<span class="kls-telt">telt ${fmtPts(pl.klassement)}</span>` : '');
     if(mode==='abs-netto') return pl.absNetto;
     if(mode==='abs-bruto') return pl.absBruto;
     if(mode==='strokeplay-netto') return pl.strokeplayNetto;
@@ -4922,7 +5143,7 @@ async function tekenKlassementBody(toernooiId, mode){
     <th style="width:38px;vertical-align:top">#</th><th style="width:${spelerBreedte}px;vertical-align:top">Speler</th>
     ${labels.map(l=>{
       const r0 = rondes.find(r=>rondeLabelKey(r)===l);
-      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l);
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, (mode==='stableford' && klsRegLabels.has(l))?'klassement: regulier':'');
     }).join('')}
     <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
@@ -4935,13 +5156,14 @@ async function tekenKlassementBody(toernooiId, mode){
       ${labels.map(l=>{
         const pl = a.perLabel[l];
         const klikbaar = pl && pl.scoreIds && pl.scoreIds.length;
-        return `<td style="text-align:center"${klikbaar?` class="klikbaar" onclick='openScorekaartPopup(${JSON.stringify(pl.scoreIds)})'`:''}>${cel(pl)}</td>`;
+        return `<td style="text-align:center"${klikbaar?` class="klikbaar" onclick='openScorekaartPopup(${JSON.stringify(pl.scoreIds)})'`:''}>${cel(pl, l)}</td>`;
       }).join('')}
       <td style="text-align:center"><b style="color:var(--gd)">${totaal(a)}</b></td>
     </tr>`;
   }).join('')}
   </tbody></table></div>
   ${mode==='stableford'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">Cijfers zijn netto Stableford-punten per kolom. Hoogste totaal wint.</p>':''}
+  ${(mode==='stableford' && klsRegLabels.size)?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" is het grote cijfer de ronde-uitslag volgens de afwijkende scoring. In het totaal telt de volledige, reguliere score van die ronde — dat is het kleine cijfer achter "telt". Sorteren op zo\'n ronde gaat op de ronde-uitslag.</p>':''}
   ${mode==='abs-netto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">ABS (adjusted) netto strokeplay: score per hole gemaximeerd op het punt waarop nog precies 0 stablefordpunten worden gehaald (bijv. par 5 met 1 slag mee → max. 8), min playing handicap. Laagste totaal wint.</p>':''}
   ${mode==='abs-bruto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">ABS (adjusted) bruto strokeplay: score per hole gemaximeerd op het punt waarop nog precies 0 stablefordpunten worden gehaald. Laagste totaal wint.</p>':''}
   ${mode==='strokeplay-netto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">Strokeplay netto: totaal aantal slagen min playing handicap, zonder aftopping per hole. Laagste totaal wint.</p>':''}
@@ -4955,15 +5177,16 @@ async function tekenKlassementBody(toernooiId, mode){
 // klassement hierboven) en telt per team de punten van de teamleden bij
 // elkaar op — via effectiefTeamId, dus inclusief eventuele per-ronde
 // uitzonderingen op de standaardindeling.
-function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin, muntjesRondes, muntjesRijen){
+function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin, muntjesRondes, muntjesRijen, klsRegLabels){
   muntjesRondes = muntjesRondes || []; muntjesRijen = muntjesRijen || [];
+  klsRegLabels = klsRegLabels || new Set();
   const teams = teamsVoorToernooi(toernooiId);
   if(!teams.length){
     body.innerHTML = `<div class="empty">${admin?'Nog geen teams aangemaakt — ga naar Toernooien beheer → Teams beheren.':'Nog geen teams ingedeeld voor dit toernooi.'}</div>`;
     return;
   }
   const perTeam = {};
-  teams.forEach(tm=>{ perTeam[tm.id] = {team:tm, perLabel:{}, totaal:0, mPerLabel:{}, mTotaal:null}; });
+  teams.forEach(tm=>{ perTeam[tm.id] = {team:tm, perLabel:{}, kPerLabel:{}, totaal:0, mPerLabel:{}, mTotaal:null}; });
   rondes.forEach(r=>{
     const label = rondeLabelKey(r);
     Object.values(perSpeler).forEach(agg=>{
@@ -4972,9 +5195,12 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
       const teamId = effectiefTeamId(agg.speler_id, r.id, toernooiId);
       if(!teamId || !perTeam[teamId]) return;
       const tAgg = perTeam[teamId];
-      if(tAgg.perLabel[label]==null) tAgg.perLabel[label] = 0;
+      // Zelfde onderscheid als in het individuele klassement: de kolom toont
+      // de ronde-uitslag, het totaal telt de klassementwaarde.
+      if(tAgg.perLabel[label]==null){ tAgg.perLabel[label] = 0; tAgg.kPerLabel[label] = 0; }
       tAgg.perLabel[label] += pl.stableford;
-      tAgg.totaal += pl.stableford;
+      tAgg.kPerLabel[label] += pl.klassement;
+      tAgg.totaal += pl.klassement;
     });
   });
   // Muntjes Spel: een TWEEDE, apart cijfer per team (per ronde en als eigen
@@ -5021,7 +5247,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     <th style="width:38px;vertical-align:top">#</th><th style="width:${teamBreedte}px;vertical-align:top">Team</th>
     ${labels.map(l=>{
       const r0 = rondes.find(r=>rondeLabelKey(r)===l);
-      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, muntLabels.has(l)?'Stableford / Muntjes':'');
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, [klsRegLabels.has(l)?'klassement: regulier':'', muntLabels.has(l)?'Stableford / Muntjes':''].filter(Boolean));
     }).join('')}
     ${toonMuntjes
       ? `<th class="kls-tot-stb" data-pdf="Stableford" onclick="klsSorteerOpTotaal()" title="Sorteer op Stableford-totaal" style="text-align:center;vertical-align:top;white-space:normal;cursor:pointer;${(!sortLabelActief && !sortMuntjes)?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}"><span class="kls-lang">Stableford</span><span class="kls-kort">STB</span></th>
@@ -5033,13 +5259,14 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     return `<tr>
       <td><span class="rb ${rb}">${i+1}</span></td>
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${tAgg.team.kleur};margin-right:6px;vertical-align:middle"></span><b>${esc(tAgg.team.naam)}</b></td>
-      ${labels.map(l=>`<td style="text-align:center">${tAgg.perLabel[l]!=null?fmtPts(tAgg.perLabel[l]):'<span style="color:var(--tl)">—</span>'}${muntLabels.has(l)?`<span class="kls-munt">${fmtMunt(tAgg.mPerLabel[l]==null?null:tAgg.mPerLabel[l])}</span>`:''}</td>`).join('')}
+      ${labels.map(l=>`<td style="text-align:center">${tAgg.perLabel[l]!=null?fmtPts(tAgg.perLabel[l]):'<span style="color:var(--tl)">—</span>'}${(klsRegLabels.has(l) && tAgg.perLabel[l]!=null)?`<span class="kls-telt">telt ${fmtPts(tAgg.kPerLabel[l])}</span>`:''}${muntLabels.has(l)?`<span class="kls-munt">${fmtMunt(tAgg.mPerLabel[l]==null?null:tAgg.mPerLabel[l])}</span>`:''}</td>`).join('')}
       <td${toonMuntjes?' class="kls-tot"':''} style="text-align:center"><b style="color:var(--gd)">${fmtPts(tAgg.totaal)}</b></td>
       ${toonMuntjes?`<td class="kls-tot" style="text-align:center"><b class="kls-munt-tot">${fmtMunt(tAgg.mTotaal)}</b></td>`:''}
     </tr>`;
   }).join('')}
   </tbody></table></div>
   <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:8px">Teamscore = som van de netto Stableford-punten van de teamleden per ronde. Hoogste totaal wint.</p>
+  ${klsRegLabels.size?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" is het grote cijfer de ronde-uitslag volgens de afwijkende scoring; in het totaal telt de reguliere score van die ronde (het kleine cijfer achter "telt").</p>`:''}
   ${toonMuntjes?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Het kleine cijfer met het muntje is het muntjestotaal van het team in die ronde. Muntjes zijn een apart spel: ze staan in hun eigen totaalkolom en tellen niet mee in de Stableford-teamscore (STB). Tik op "Muntjes" om daarop te sorteren.</p>`:''}
   <p style="font-size:.68rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Tik op een ronde-kolom om alleen op die ronde te sorteren, of op ${toonMuntjes?'het Stableford-totaal':'"Totaal"'} om terug te gaan.</p>
   `;
@@ -5147,7 +5374,8 @@ async function renderScorekaartPopup(scoreId){
   const subtitel = [
     ronde&&ronde.datum?fDatum(ronde.datum):null,
     baan?baan.naam+(comb?' — '+comb.naam:''):null,
-    `Start hcp: ${fH(speler.exact_hcp)}`,
+    // Vaste kaart: de handicap van toen (als die bewaard is), niet de actuele.
+    score.hcp_vast===true ? (score.exact_hcp!=null ? `Start hcp: ${fH(Number(score.exact_hcp))}` : null) : `Start hcp: ${fH(speler.exact_hcp)}`,
     `Playing hcp: ${fPH(pH)}`
   ].filter(Boolean).map(esc).join(' · ');
 
