@@ -27,6 +27,13 @@
   --vvh: 100vh; --vvt: 0px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+/* Invulvelden nooit kleiner dan 16px: een iPhone zoomt het hele scherm in
+   zodra je in een veld tikt waarvan de letters kleiner zijn dan 16px, en zoomt
+   daarna niet meer terug. Na het inloggen (naam + pincode waren 15,2px) stond
+   de app daardoor ~5% ingezoomd en viel het ondermenu half buiten beeld, tot
+   je het toestel draaide. Velden met een eigen, grotere lettergrootte (zoals
+   de scorevakjes) houden die gewoon. */
+input,select,textarea{font-size:16px}
 html,body{height:100%;overflow-x:hidden}
 body{font-family:'IBM Plex Sans','Inter',sans-serif;background:var(--cr);color:var(--td);padding-bottom:calc(var(--nh) + env(safe-area-inset-bottom))}
 
@@ -95,7 +102,7 @@ tr:last-child td{border-bottom:none}
 /* FORMS */
 .fg{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
 .fg label{font-size:.68rem;font-weight:600;color:var(--tm);letter-spacing:.04em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace}
-.fg input,.fg select,.fg textarea{padding:12px 13px;border:1.5px solid var(--cd);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:.95rem;color:var(--td);background:var(--cr);width:100%;-webkit-appearance:none}
+.fg input,.fg select,.fg textarea{padding:12px 13px;border:1.5px solid var(--cd);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:1rem;color:var(--td);background:var(--cr);width:100%;-webkit-appearance:none}
 .fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--gl);background:var(--wh)}
 .fg.af-wrap{position:relative}
 .fg.af-wrap select{position:relative;z-index:1}
@@ -222,10 +229,12 @@ tr:last-child td{border-bottom:none}
    regulier — zie rondeKlassementRegulier). */
 /* Afgeronde (gesloten) ronde op het toernooischerm: geen knoppen of
    startinformatie meer, alleen het label "Afgerond" en de winnaar. */
-.ronde-winnaar{display:flex;align-items:center;gap:8px;margin-top:9px;font-family:'Inter',sans-serif;font-size:.92rem;color:var(--td);line-height:1.3}
-.ronde-winnaar svg{width:26px;height:26px;flex-shrink:0}
-.ronde-winnaar b{color:var(--gd);font-weight:700}
-.ronde-winnaar .rw-pt{color:var(--tl);font-size:.8rem;white-space:nowrap}
+.ronde-winnaar{display:flex;align-items:center;gap:10px;margin-top:9px;font-family:'Inter',sans-serif;line-height:1.3}
+.ronde-winnaar + .ronde-winnaar{margin-top:7px}
+.ronde-winnaar svg{width:28px;height:28px;flex-shrink:0}
+.ronde-winnaar .rw-naam{font-size:.95rem;font-weight:700;color:var(--gd)}
+.ronde-winnaar .rw-naam i{font-style:normal;font-weight:400;color:var(--tl)}
+.ronde-winnaar .rw-sub{font-size:.8rem;color:var(--tl);margin-top:1px}
 .kls-telt{display:block;font-family:'Inter',sans-serif;font-size:.68rem;font-weight:600;color:var(--tl);line-height:1.25;margin-top:1px;white-space:nowrap}
 /* Muntjescijfer in het klassement: bewust kleiner en in een eigen kleur, zodat
    het nooit voor een Stableford-cijfer wordt aangezien. */
@@ -303,6 +312,20 @@ tr:last-child td{border-bottom:none}
    binnenmarge leveren. */
 @media (orientation:landscape){
   #panel-klassement{width:100vw;max-width:100vw;margin-left:calc(50% - 50vw);box-sizing:border-box}
+}
+/* Telefoon in landscape (laag & breed scherm): de groene balken boven en
+   onder kosten daar relatief veel hoogte. Beide worden smaller — het
+   ondermenu zet icoon en tekst naast elkaar in plaats van onder elkaar — zodat
+   er meer ruimte overblijft voor het scherm zelf (vooral het klassement).
+   Alles wat van de balkhoogte afhangt (.main, body, toasts) rekent met
+   --hh/--nh en schuift dus vanzelf mee. Tablets en laptops (hoger dan 520px)
+   houden de gewone balken. */
+@media (orientation:landscape) and (max-height:520px){
+  :root{--hh:44px;--nh:40px}
+  .main{padding-top:calc(var(--hh) + 8px)}
+  .ntab{flex-direction:row;gap:7px;font-size:.74rem;padding:2px}
+  .ntab .ic{font-size:1rem}
+  .ntab.active .ic{transform:none}
 }
 /* Scorekaart-popup: op een telefoon in landscape (laag & breed scherm) alles
    op het scherm laten passen, zonder te hoeven scrollen — net als in de
@@ -438,7 +461,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.38.0';
+const APP_VERSION = '1.39.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -3507,8 +3530,10 @@ const BOKAAL_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 5.
 // toernooischerm. Zelfde cijfer als de kolom van die ronde in het Klassement:
 // Stableford (ronde-uitslag, dus mét spelvorm en boost) als dat voor de ronde
 // aanstaat, anders het eerste scoringstype dat wel aanstaat (laagste wint).
-// Bij een gelijke stand komen alle namen terug — er is hier bewust geen
+// Bij een gelijke stand komen alle winnaars terug — er is hier bewust geen
 // countback, net zoals bij sorteren op één ronde in het Klassement.
+// Per winnaar gaat ook zijn reguliere Stableford-score mee (de volledige
+// kaart, los van spelvorm en boost), voor de regel onder de naam.
 function rondeWinnaars(ronde, scores){
   const holes = combinatieHoles(combinatieById(ronde.combinatie_id));
   const types = (Array.isArray(ronde.scoring_types) && ronde.scoring_types.length) ? ronde.scoring_types : ['stableford','abs-netto','abs-bruto'];
@@ -3522,23 +3547,46 @@ function rondeWinnaars(ronde, scores){
     else if(type==='strokeplay-netto') w = sc.netto;
     else w = sc.bruto;
     if(w==null || isNaN(w)) return;
-    kandidaten.push({speler_id: sc.speler_id, w});
+    kandidaten.push({speler_id: sc.speler_id, w, regulier: sc.stableford});
   });
   if(!kandidaten.length) return null;
   const beste = type==='stableford' ? Math.max(...kandidaten.map(k=>k.w)) : Math.min(...kandidaten.map(k=>k.w));
-  const namen = kandidaten.filter(k=>k.w===beste)
-    .map(k=>{ const sp = allSpelers.find(x=>x.id===k.speler_id); return sp ? sp.naam : '?'; })
-    .sort((a,b)=>a.localeCompare(b));
-  return {namen, tekst: type==='stableford' ? fmtPts(beste)+' pt' : beste+' slagen'};
+  const winnaars = kandidaten.filter(k=>k.w===beste)
+    .map(k=>{ const sp = allSpelers.find(x=>x.id===k.speler_id); return {naam: sp ? sp.naam : '?', regulier: k.regulier}; })
+    .sort((x,y)=>x.naam.localeCompare(y.naam));
+  return {type, beste, winnaars};
+}
+// De regel onder de naam van de winnaar. Bij een bijzondere scoring (2x3/5x4/2x5,
+// Hidden Holes of Boost) eerst de uitslag volgens die scoring en daarna de
+// reguliere Stableford-score; bij een reguliere ronde alleen "Regulier: ##".
+// Rondes zonder Stableford tonen het scoringstype waarop gewonnen is.
+function rondeWinnaarSubregel(ronde, win, regulier){
+  if(win.type!=='stableford'){
+    const opt = SCORING_TYPE_OPTS.find(o=>o.v===win.type);
+    return esc(opt ? opt.l : win.type)+': '+win.beste;
+  }
+  const label = spelvormLabel(ronde);
+  return (label==='Regulier' ? '' : esc(label)+': '+fmtPts(win.beste)+' · ')+'Regulier: '+fmtPts(regulier);
 }
 // Kaart van een afgeronde ronde: baan, lus en datum, het label "Afgerond" en
-// de winnaar. Geen Startlijst-knop, geen Muntjes Spel-regel, geen starttijd of
-// flight — dat is allemaal informatie voor een ronde die nog gespeeld wordt.
+// de winnaar (bokaal + naam, daaronder de score). Geen Startlijst-knop, geen
+// Muntjes Spel-regel, geen starttijd of flight — dat is allemaal informatie
+// voor een ronde die nog gespeeld wordt.
 function afgerondeRondeKaartHtml(r, baan, comb, scores){
   const win = rondeWinnaars(r, scores);
-  const winHtml = win
-    ? `<div class="ronde-winnaar">${BOKAAL_SVG}<span>${win.namen.length>1?'Winnaars':'Winnaar'}: ${win.namen.map(n=>`<b>${esc(n)}</b>`).join(' &amp; ')} <span class="rw-pt">· ${win.tekst}</span></span></div>`
-    : `<div class="rm" style="margin-top:6px">Geen volledige kaarten ingeleverd.</div>`;
+  let winHtml = `<div class="rm" style="margin-top:6px">Geen volledige kaarten ingeleverd.</div>`;
+  if(win){
+    // Gelijk geëindigde winnaars delen één regel zolang ook hun reguliere score
+    // gelijk is; anders krijgt ieder een eigen regel met zijn eigen score.
+    const groepen = [];
+    win.winnaars.forEach(w=>{
+      const sleutel = win.type==='stableford' ? w.regulier : null;
+      let g = groepen.find(x=>x.sleutel===sleutel);
+      if(!g){ g = {sleutel, namen: []}; groepen.push(g); }
+      g.namen.push(w.naam);
+    });
+    winHtml = groepen.map(g=>`<div class="ronde-winnaar">${BOKAAL_SVG}<div><div class="rw-naam">${g.namen.map(n=>esc(n)).join(' <i>&amp;</i> ')}</div><div class="rw-sub">${rondeWinnaarSubregel(r, win, g.sleutel)}</div></div></div>`).join('');
+  }
   return `<div class="rc"><div class="rch" style="align-items:flex-start;cursor:default">
       <div><div class="rd" style="font-size:1rem">${esc(baan?baan.naam:'—')}</div><div class="rm">${comb?esc(comb.naam):'—'}${r.datum?' · '+fDatum(r.datum):''}</div>${winHtml}</div>
       <span class="sp sc2" style="flex-shrink:0">Afgerond</span>
