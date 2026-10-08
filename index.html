@@ -220,6 +220,12 @@ tr:last-child td{border-bottom:none}
 /* "telt X": de waarde waarmee een ronde in het TOTAAL meetelt, als die afwijkt
    van de ronde-uitslag erboven (scoring alleen voor de ronde, klassement
    regulier — zie rondeKlassementRegulier). */
+/* Afgeronde (gesloten) ronde op het toernooischerm: geen knoppen of
+   startinformatie meer, alleen het label "Afgerond" en de winnaar. */
+.ronde-winnaar{display:flex;align-items:center;gap:8px;margin-top:9px;font-family:'Inter',sans-serif;font-size:.92rem;color:var(--td);line-height:1.3}
+.ronde-winnaar svg{width:26px;height:26px;flex-shrink:0}
+.ronde-winnaar b{color:var(--gd);font-weight:700}
+.ronde-winnaar .rw-pt{color:var(--tl);font-size:.8rem;white-space:nowrap}
 .kls-telt{display:block;font-family:'Inter',sans-serif;font-size:.68rem;font-weight:600;color:var(--tl);line-height:1.25;margin-top:1px;white-space:nowrap}
 /* Muntjescijfer in het klassement: bewust kleiner en in een eigen kleur, zodat
    het nooit voor een Stableford-cijfer wordt aangezien. */
@@ -432,7 +438,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.37.0';
+const APP_VERSION = '1.38.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -3494,6 +3500,52 @@ function renderToernooienPanel(){
   }).join(''):'<div class="empty">Nog geen toernooien.</div>'}`;
 }
 
+// Bokaal-icoontje (eigen tekening in de goudkleur van de app, zodat het er op
+// elke telefoon hetzelfde uitziet — een emoji verschilt per merk).
+const BOKAAL_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 5.2H4.3v1.3a3.6 3.6 0 0 0 3.5 3.6M16.8 5.2h2.9v1.3a3.6 3.6 0 0 1-3.5 3.6" fill="none" stroke="#c9a84c" stroke-width="1.7" stroke-linecap="round"/><path d="M7 3h10v5.2a5 5 0 0 1-10 0z" fill="#c9a84c"/><path d="M9.3 4.6v3.3a2.9 2.9 0 0 0 1 2.2" fill="none" stroke="#f0d878" stroke-width="1.2" stroke-linecap="round"/><path d="M11 12.8h2v3.4h-2z" fill="#c9a84c"/><path d="M8.2 16.2h7.6a.9.9 0 0 1 .9.9v1.5H7.3v-1.5a.9.9 0 0 1 .9-.9z" fill="#c9a84c"/><rect x="5.8" y="18.9" width="12.4" height="2.1" rx=".8" fill="#1a3a2a"/></svg>';
+// Winnaar(s) van één ronde, voor de kaart van een afgeronde ronde op het
+// toernooischerm. Zelfde cijfer als de kolom van die ronde in het Klassement:
+// Stableford (ronde-uitslag, dus mét spelvorm en boost) als dat voor de ronde
+// aanstaat, anders het eerste scoringstype dat wel aanstaat (laagste wint).
+// Bij een gelijke stand komen alle namen terug — er is hier bewust geen
+// countback, net zoals bij sorteren op één ronde in het Klassement.
+function rondeWinnaars(ronde, scores){
+  const holes = combinatieHoles(combinatieById(ronde.combinatie_id));
+  const types = (Array.isArray(ronde.scoring_types) && ronde.scoring_types.length) ? ronde.scoring_types : ['stableford','abs-netto','abs-bruto'];
+  const type = SCORING_TYPE_OPTS.map(o=>o.v).find(v=>types.includes(v)) || 'stableford';
+  const kandidaten = [];
+  scores.forEach(sc=>{
+    if(sc.ronde_id!==ronde.id || sc.stableford==null) return;
+    let w = null;
+    if(type==='stableford') w = effectieveStablefordVoorRonde(sc, ronde, holes);
+    else if(type==='abs-netto' || type==='abs-bruto'){ const abs = absStrokeplayVoorScore(sc, holes); if(abs) w = type==='abs-netto' ? abs.netto : abs.bruto; }
+    else if(type==='strokeplay-netto') w = sc.netto;
+    else w = sc.bruto;
+    if(w==null || isNaN(w)) return;
+    kandidaten.push({speler_id: sc.speler_id, w});
+  });
+  if(!kandidaten.length) return null;
+  const beste = type==='stableford' ? Math.max(...kandidaten.map(k=>k.w)) : Math.min(...kandidaten.map(k=>k.w));
+  const namen = kandidaten.filter(k=>k.w===beste)
+    .map(k=>{ const sp = allSpelers.find(x=>x.id===k.speler_id); return sp ? sp.naam : '?'; })
+    .sort((a,b)=>a.localeCompare(b));
+  return {namen, tekst: type==='stableford' ? fmtPts(beste)+' pt' : beste+' slagen'};
+}
+// Kaart van een afgeronde ronde: baan, lus en datum, het label "Afgerond" en
+// de winnaar. Geen Startlijst-knop, geen Muntjes Spel-regel, geen starttijd of
+// flight — dat is allemaal informatie voor een ronde die nog gespeeld wordt.
+function afgerondeRondeKaartHtml(r, baan, comb, scores){
+  const win = rondeWinnaars(r, scores);
+  const winHtml = win
+    ? `<div class="ronde-winnaar">${BOKAAL_SVG}<span>${win.namen.length>1?'Winnaars':'Winnaar'}: ${win.namen.map(n=>`<b>${esc(n)}</b>`).join(' &amp; ')} <span class="rw-pt">· ${win.tekst}</span></span></div>`
+    : `<div class="rm" style="margin-top:6px">Geen volledige kaarten ingeleverd.</div>`;
+  return `<div class="rc"><div class="rch" style="align-items:flex-start;cursor:default">
+      <div><div class="rd" style="font-size:1rem">${esc(baan?baan.naam:'—')}</div><div class="rm">${comb?esc(comb.naam):'—'}${r.datum?' · '+fDatum(r.datum):''}</div>${winHtml}</div>
+      <span class="sp sc2" style="flex-shrink:0">Afgerond</span>
+    </div>
+    ${isAdmin()?`<div class="ra"><button class="btn bbl bsm" onclick="openInvoerstatusModal('${r.id}')">Score invoeren (admin)</button></div>`:''}
+    </div>`;
+}
 async function openToernooiDetail(toernooiId){
   huidigToernooiDetailId = toernooiId;
   showPanel('toernooien'); // houd nav-status correct
@@ -3533,8 +3585,8 @@ async function openToernooiDetail(toernooiId){
   ${rondesTeTonen.map(r=>{
     const comb = combinatieById(r.combinatie_id);
     const baan = comb ? baanById(comb.baan_id) : null;
+    if(r.status==='gesloten') return afgerondeRondeKaartHtml(r, baan, comb, scores);
     const mijnScore = ingelogdSpeler ? scores.find(s=>s.ronde_id===r.id && s.speler_id===ingelogdSpeler.id) : null;
-    const aantalIngevoerd = scores.filter(s=>s.ronde_id===r.id && s.stableford!=null).length;
     let mijnFlightHtml = '';
     let rondeFlightIds = new Set();
     if(ingelogdSpeler){
@@ -3563,8 +3615,7 @@ async function openToernooiDetail(toernooiId){
       ${rondeFlightIds.size?`<button class="btn bpu bsm" onclick="openVolledigeStartlijstModal('${r.id}')" style="flex-shrink:0">Startlijst</button>`:''}
     </div>
     <div class="ra">
-      ${r.status==='gesloten' ? `<span class="rm">${aantalIngevoerd} kaart(en) ingeleverd — uitslag hieronder bij Klassement</span>` :
-        magNogNietScoren(r) ? `<span class="rm">Scoreinvoer opent op ${fDatum(r.datum)}</span>` :
+      ${magNogNietScoren(r) ? `<span class="rm">Scoreinvoer opent op ${fDatum(r.datum)}</span>` :
         ingelogdSpeler ? `<button class="btn ${mijnScore&&mijnScore.stableford!=null?'bg':'bp'} bsm" onclick="openScoreModal('${r.id}')">${mijnScore&&mijnScore.stableford!=null?'Score bewerken':'Score invoeren'}</button>` : ''}
       ${isAdmin()?`<button class="btn bbl bsm" onclick="openInvoerstatusModal('${r.id}')">Score invoeren (admin)</button>`:''}
     </div>
