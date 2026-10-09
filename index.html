@@ -259,6 +259,27 @@ tr:last-child td{border-bottom:none}
   .kls-kort{display:none}
 }
 .munt-neg{color:var(--red)}
+/* TEAMS-KLASSEMENT — bijdrage per speler. Onder elke teamrij staat per
+   teamlid één regel: per ronde zijn punten met een balkje in de teamkleur
+   (lengte t.o.v. de hoogste bijdrage in die kolom, over alle teams), de
+   hoogste bijdrage binnen het team vet. Tik op de teamrij om de spelers te
+   verbergen of weer te tonen. */
+#klsBody table tr.kls-team{cursor:pointer}
+/* vaste spatie vóór het pijltje: zo breekt het nooit los van de teamnaam af */
+#klsBody table tr.kls-team td:nth-child(2) b::after{content:'\00a0▾';font-size:.72rem;font-weight:400;color:var(--tl)}
+#klsBody table tr.kls-team.dicht td:nth-child(2) b::after{content:'\00a0▸'}
+#klsBody table tr.kls-lid td,#klsBody table tr.kls-lid td:nth-child(1),#klsBody table tr.kls-lid td:nth-child(2){background:#faf7f0;padding-top:5px;padding-bottom:5px;border-bottom-color:transparent;font-size:13px;color:var(--tm)}
+#klsBody table tr.kls-lid.kls-lid-laatste td{border-bottom-color:var(--cd);padding-bottom:10px}
+#klsBody table tr.kls-lid:last-child td{padding-bottom:10px}
+.kls-lid-naam{display:block;border-left:3px solid var(--tk,var(--cd));padding-left:8px;line-height:1.25}
+.kls-bij{display:inline-flex;flex-direction:column;align-items:center;gap:3px;vertical-align:middle}
+.kls-bij b{font-family:'Inter',sans-serif;font-weight:500;line-height:1.1}
+.kls-bij.top b{font-weight:800;color:var(--gd)}
+.kls-bij i{display:block;width:36px;height:4px;border-radius:2px;background:var(--cd);overflow:hidden}
+.kls-bij i i{width:var(--w,0%);background:var(--tk,var(--gl))}
+.kls-lid .kls-munt{font-size:.66rem}
+.kls-lid .kls-munt::before{width:6px;height:6px;margin-right:3px}
+.kls-lid .kls-munt-tot{font-size:.78rem;font-weight:600}
 .hb.hb-munt{background:#fff8e1;color:#8a6d1c}
 .klikbaar{cursor:pointer}
 .sk table{font-family:'IBM Plex Mono',monospace}
@@ -461,7 +482,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.40.0';
+const APP_VERSION = '1.41.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -5076,13 +5097,26 @@ function exporteerKlassementPdf(){
       kloon.querySelectorAll('.kls-munt,.kls-telt').forEach(el=>el.remove());
       return plat(kloon) + (telt ? ' ('+plat(telt)+')' : '') + (munt ? ' / '+plat(munt) : '');
     };
-    const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr=>Array.from(tr.querySelectorAll('td')).map(celTekst));
+    // Teams: de spelersregels onder een team gaan mee (ingesprongen en grijs,
+    // de teamregel zelf vet); van een dichtgeklapt team alleen de teamregel.
+    const trs = Array.from(table.querySelectorAll('tbody tr')).filter(tr=>!tr.hidden);
+    const isLid = trs.map(tr=>tr.classList.contains('kls-lid'));
+    const heeftLeden = isLid.some(Boolean);
+    const rows = trs.map((tr,i)=>{
+      const cellen = Array.from(tr.querySelectorAll('td')).map(celTekst);
+      if(isLid[i] && cellen.length>1) cellen[1] = '   '+cellen[1];
+      return cellen;
+    });
     doc.autoTable({
       head, body: rows, startY: 28,
       styles:{fontSize:7, halign:'center'},
       headStyles:{fillColor:[26,58,42]},
       didParseCell: function(data){
         if(data.column.index <= 1){ data.cell.styles.halign = 'left'; }
+        if(heeftLeden && data.section==='body'){
+          if(isLid[data.row.index]) data.cell.styles.textColor = [95,95,95];
+          else data.cell.styles.fontStyle = 'bold';
+        }
       }
     });
   } else {
@@ -5206,6 +5240,10 @@ async function tekenKlassementBody(toernooiId, mode){
       const eff = effectieveStablefordVoorRonde(s, r, holesVoorRonde(r));
       const kls = klassementStablefordVoorRonde(s, r, holesVoorRonde(r));
       pl.stableford += eff; pl.klassement += kls; agg.totStableford += kls; agg.aantalRondes++;
+      // Per ronde apart bewaard voor het Teams-klassement: de teamindeling kan
+      // per ronde verschillen, en bij een gedeeld rapportagelabel moet elke
+      // kaart precies één keer bij een team worden geteld.
+      (pl.perRonde = pl.perRonde || {})[r.id] = {stableford: eff, klassement: kls};
       const abs = absStrokeplayVoorScore(s, holesVoorRonde(r));
       if(abs){ pl.absBruto += abs.bruto; pl.absNetto += abs.netto; agg.totAbsBruto += abs.bruto; agg.totAbsNetto += abs.netto; }
       pl.strokeplayBruto += s.bruto||0; pl.strokeplayNetto += s.netto||0;
@@ -5304,6 +5342,23 @@ async function tekenKlassementBody(toernooiId, mode){
 // klassement hierboven) en telt per team de punten van de teamleden bij
 // elkaar op — via effectiefTeamId, dus inclusief eventuele per-ronde
 // uitzonderingen op de standaardindeling.
+// Welke teams in het Teams-klassement zijn dichtgeklapt (spelers verborgen).
+// Standaard staat elk team open; de keuze wordt per toernooi onthouden.
+function klsTeamsDichtKey(toernooiId){ return 'klsTeamsDicht_'+toernooiId; }
+function klsTeamsDicht(toernooiId){
+  try{ const p = JSON.parse(localStorage.getItem(klsTeamsDichtKey(toernooiId)) || '[]'); return new Set(Array.isArray(p) ? p : []); }
+  catch(e){ return new Set(); }
+}
+function klsToggleTeam(teamId){
+  const toernooiId = localStorage.getItem('klassementToernooi');
+  const dicht = klsTeamsDicht(toernooiId);
+  if(dicht.has(teamId)) dicht.delete(teamId); else dicht.add(teamId);
+  try{ localStorage.setItem(klsTeamsDichtKey(toernooiId), JSON.stringify(Array.from(dicht))); }catch(e){ /* dan alleen voor nu */ }
+  document.querySelectorAll('#klsBody tr[data-team="'+teamId+'"]').forEach(tr=>{
+    if(tr.classList.contains('kls-team')) tr.classList.toggle('dicht', dicht.has(teamId));
+    else tr.hidden = dicht.has(teamId);
+  });
+}
 function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, liveLabels, perSpeler, admin, muntjesRondes, muntjesRijen, klsRegLabels){
   muntjesRondes = muntjesRondes || []; muntjesRijen = muntjesRijen || [];
   klsRegLabels = klsRegLabels || new Set();
@@ -5313,21 +5368,38 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     return;
   }
   const perTeam = {};
-  teams.forEach(tm=>{ perTeam[tm.id] = {team:tm, perLabel:{}, kPerLabel:{}, totaal:0, mPerLabel:{}, mTotaal:null}; });
+  teams.forEach(tm=>{ perTeam[tm.id] = {team:tm, perLabel:{}, kPerLabel:{}, totaal:0, mPerLabel:{}, mTotaal:null, leden:{}}; });
+  // Eén regel per teamlid onder de teamrij: zijn bijdrage per ronde-kolom.
+  const lidVan = (tAgg, spelerId)=> tAgg.leden[spelerId] || (tAgg.leden[spelerId] = {speler_id:spelerId, perLabel:{}, kPerLabel:{}, totaal:0, mPerLabel:{}, mTotaal:null, scoreIds:{}});
+  // Iedereen die standaard bij een team is ingedeeld staat erbij, ook wie nog
+  // geen volledige kaart heeft (die krijgt streepjes).
+  allDeelnemers.filter(d=>d.toernooi_id===toernooiId && d.status!=='afgemeld').forEach(d=>{
+    const teamId = effectiefTeamId(d.speler_id, null, toernooiId);
+    if(teamId && perTeam[teamId]) lidVan(perTeam[teamId], d.speler_id);
+  });
   rondes.forEach(r=>{
     const label = rondeLabelKey(r);
     Object.values(perSpeler).forEach(agg=>{
       const pl = agg.perLabel[label];
-      if(!pl || !pl.compleet) return;
+      // Per RONDE optellen (niet per kolom): bij twee rondes met hetzelfde
+      // rapportagelabel telde een kaart voorheen bij elk van die rondes mee,
+      // en kwam de teamscore dus te hoog uit.
+      const pr = pl && pl.perRonde && pl.perRonde[r.id];
+      if(!pr) return;
       const teamId = effectiefTeamId(agg.speler_id, r.id, toernooiId);
       if(!teamId || !perTeam[teamId]) return;
       const tAgg = perTeam[teamId];
       // Zelfde onderscheid als in het individuele klassement: de kolom toont
       // de ronde-uitslag, het totaal telt de klassementwaarde.
       if(tAgg.perLabel[label]==null){ tAgg.perLabel[label] = 0; tAgg.kPerLabel[label] = 0; }
-      tAgg.perLabel[label] += pl.stableford;
-      tAgg.kPerLabel[label] += pl.klassement;
-      tAgg.totaal += pl.klassement;
+      tAgg.perLabel[label] += pr.stableford;
+      tAgg.kPerLabel[label] += pr.klassement;
+      tAgg.totaal += pr.klassement;
+      const lid = lidVan(tAgg, agg.speler_id);
+      lid.perLabel[label] = (lid.perLabel[label]||0) + pr.stableford;
+      lid.kPerLabel[label] = (lid.kPerLabel[label]||0) + pr.klassement;
+      lid.totaal += pr.klassement;
+      lid.scoreIds[label] = pl.scoreIds || [];
     });
   });
   // Muntjes Spel: een TWEEDE, apart cijfer per team (per ronde en als eigen
@@ -5346,6 +5418,9 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     const tAgg = perTeam[teamId], label = rondeLabelKey(r);
     tAgg.mPerLabel[label] = (tAgg.mPerLabel[label]==null ? 0 : tAgg.mPerLabel[label]) + m.waarde;
     tAgg.mTotaal = (tAgg.mTotaal==null ? 0 : tAgg.mTotaal) + m.waarde;
+    const lid = lidVan(tAgg, m.speler_id);
+    lid.mPerLabel[label] = (lid.mPerLabel[label]==null ? 0 : lid.mPerLabel[label]) + m.waarde;
+    lid.mTotaal = (lid.mTotaal==null ? 0 : lid.mTotaal) + m.waarde;
   });
   const sortMuntjes = toonMuntjes && klsSortLabel===KLS_SORT_MUNTJES;
   const sortLabelActief = klsSortLabel && labels.includes(klsSortLabel) ? klsSortLabel : null;
@@ -5366,7 +5441,51 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     return b.totaal-a.totaal;
   });
   const toonSpelvormen = rondes.some(r=>(r.spelvorm && r.spelvorm!=='regulier') || (r.boost_pct && r.boost_pct!==100));
-  const teamBreedte = naamKolomBreedte(teamRows.map(t=>t.team?t.team.naam:''));
+  const naamVan = (id)=>{ const sp = allSpelers.find(x=>x.id===id); return sp ? sp.naam : '?'; };
+  // Leden per team, in dezelfde volgorde als waarop de teams gesorteerd staan:
+  // op de gekozen ronde, op muntjes, of (standaard) op hun totale bijdrage.
+  const ledenVan = (tAgg)=> Object.values(tAgg.leden).sort((a,b)=>{
+    const na = (x)=> x==null ? -Infinity : x;
+    if(sortMuntjes) return na(b.mTotaal)-na(a.mTotaal) || b.totaal-a.totaal || naamVan(a.speler_id).localeCompare(naamVan(b.speler_id));
+    if(sortLabelActief) return na(b.perLabel[sortLabelActief])-na(a.perLabel[sortLabelActief]) || b.totaal-a.totaal || naamVan(a.speler_id).localeCompare(naamVan(b.speler_id));
+    return b.totaal-a.totaal || naamVan(a.speler_id).localeCompare(naamVan(b.speler_id));
+  });
+  const alleLeden = teamRows.flatMap(t=>Object.values(t.leden));
+  // Schaal van de balkjes: de hoogste bijdrage in die kolom over ALLE teams,
+  // zodat gelijke punten in elk team een even lang balkje geven.
+  const kolomMax = {}; labels.forEach(l=>{ kolomMax[l] = Math.max(0, ...alleLeden.map(x=>x.perLabel[l]||0)); });
+  const totaalMax = Math.max(0, ...alleLeden.map(x=>x.totaal||0));
+  const bijdrage = (waarde, max, top, kleur)=> `<span class="kls-bij${top?' top':''}"><b>${fmtPts(waarde)}</b><i><i style="--w:${max>0?Math.max(0,Math.min(100,Math.round(waarde/max*100))):0}%;--tk:${kleur}"></i></i></span>`;
+  const streep = '<span style="color:var(--tl)">—</span>';
+  const dicht = klsTeamsDicht(toernooiId);
+  const aantalKolommen = 2 + labels.length + (toonMuntjes?2:1);
+  const ledenRijenHtml = (tAgg)=>{
+    const leden = ledenVan(tAgg);
+    const isDicht = dicht.has(tAgg.team.id);
+    const kleur = tAgg.team.kleur;
+    const teamTop = {}; labels.forEach(l=>{ teamTop[l] = Math.max(-Infinity, ...leden.filter(x=>x.perLabel[l]!=null).map(x=>x.perLabel[l])); });
+    const totTop = Math.max(-Infinity, ...leden.filter(x=>Object.keys(x.perLabel).length).map(x=>x.totaal));
+    if(!leden.length) return `<tr class="kls-lid kls-lid-laatste" data-team="${tAgg.team.id}"${isDicht?' hidden':''}><td></td><td colspan="${aantalKolommen-1}" style="text-align:left"><span class="kls-lid-naam" style="--tk:${kleur}">Nog geen spelers ingedeeld</span></td></tr>`;
+    return leden.map((lid,i)=>{
+      const speelde = Object.keys(lid.perLabel).length>0;
+      return `<tr class="kls-lid${i===leden.length-1?' kls-lid-laatste':''}" data-team="${tAgg.team.id}"${isDicht?' hidden':''}>
+      <td></td>
+      <td><span class="kls-lid-naam" style="--tk:${kleur}">${esc(naamVan(lid.speler_id))}</span></td>
+      ${labels.map(l=>{
+        const w = lid.perLabel[l];
+        const ids = lid.scoreIds[l];
+        const klik = (w!=null && ids && ids.length) ? ` class="klikbaar" onclick='openScorekaartPopup(${JSON.stringify(ids)})'` : '';
+        return `<td style="text-align:center"${klik}>${w!=null?bijdrage(w, kolomMax[l], w===teamTop[l], kleur):streep}${(klsRegLabels.has(l) && w!=null)?`<span class="kls-telt">telt ${fmtPts(lid.kPerLabel[l])}</span>`:''}${(muntLabels.has(l) && lid.mPerLabel[l]!=null)?`<span class="kls-munt">${fmtMunt(lid.mPerLabel[l])}</span>`:''}</td>`;
+      }).join('')}
+      <td${toonMuntjes?' class="kls-tot"':''} style="text-align:center">${speelde?bijdrage(lid.totaal, totaalMax, lid.totaal===totTop, kleur):streep}</td>
+      ${toonMuntjes?`<td class="kls-tot" style="text-align:center">${lid.mTotaal!=null?`<span class="kls-munt-tot">${fmtMunt(lid.mTotaal)}</span>`:streep}</td>`:''}
+    </tr>`;
+    }).join('');
+  };
+  const langsteLid = alleLeden.reduce((m,x)=>Math.max(m, naamVan(x.speler_id).length), 0);
+  // Spelersnamen mogen over twee regels lopen: de kolom wordt er hooguit 112px
+  // breed door, zodat op een telefoon zo veel mogelijk ronde-kolommen passen.
+  const teamBreedte = Math.min(200, Math.max(naamKolomBreedte(teamRows.map(t=>t.team?t.team.naam:'')), Math.min(112, 34 + Math.round(langsteLid*6.4))));
   const rkw = Math.max(108, ...labels.map(l=>rondeKolomBreedte(labelText[l])));
   body.innerHTML = `
   ${(admin && liveLabels.size)?`<p style="font-size:.72rem;color:var(--gd);font-family:'Inter',sans-serif;margin-bottom:8px">🔴 Leaderboard — Pas zichtbaar voor deelnemers nadat je de ronde sluit.</p>`:''}
@@ -5383,16 +5502,17 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
   </tr></thead><tbody>
   ${teamRows.map((tAgg,i)=>{
     const rb = i===0?'r1':i===1?'r2':i===2?'r3':'ro';
-    return `<tr>
+    return `<tr class="kls-team${dicht.has(tAgg.team.id)?' dicht':''}" data-team="${tAgg.team.id}" onclick="klsToggleTeam('${tAgg.team.id}')" title="Tik om de spelers van dit team te verbergen of te tonen">
       <td><span class="rb ${rb}">${i+1}</span></td>
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${tAgg.team.kleur};margin-right:6px;vertical-align:middle"></span><b>${esc(tAgg.team.naam)}</b></td>
       ${labels.map(l=>`<td style="text-align:center">${tAgg.perLabel[l]!=null?fmtPts(tAgg.perLabel[l]):'<span style="color:var(--tl)">—</span>'}${(klsRegLabels.has(l) && tAgg.perLabel[l]!=null)?`<span class="kls-telt">telt ${fmtPts(tAgg.kPerLabel[l])}</span>`:''}${muntLabels.has(l)?`<span class="kls-munt">${fmtMunt(tAgg.mPerLabel[l]==null?null:tAgg.mPerLabel[l])}</span>`:''}</td>`).join('')}
       <td${toonMuntjes?' class="kls-tot"':''} style="text-align:center"><b style="color:var(--gd)">${fmtPts(tAgg.totaal)}</b></td>
       ${toonMuntjes?`<td class="kls-tot" style="text-align:center"><b class="kls-munt-tot">${fmtMunt(tAgg.mTotaal)}</b></td>`:''}
-    </tr>`;
+    </tr>${ledenRijenHtml(tAgg)}`;
   }).join('')}
   </tbody></table></div>
   <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:8px">Teamscore = som van de netto Stableford-punten van de teamleden per ronde. Hoogste totaal wint.</p>
+  <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Onder elk team staat wat iedere speler per ronde heeft bijgedragen; de hoogste bijdrage binnen het team is vet, en het balkje laat zien hoe die zich verhoudt tot de beste score van die ronde. Tik op een team om de spelers te verbergen, of op een score om de kaart te zien.</p>
   ${klsRegLabels.size?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" is het grote cijfer de ronde-uitslag volgens de afwijkende scoring; in het totaal telt de reguliere score van die ronde (het kleine cijfer achter "telt").</p>`:''}
   ${toonMuntjes?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Het kleine cijfer met het muntje is het muntjestotaal van het team in die ronde. Muntjes zijn een apart spel: ze staan in hun eigen totaalkolom en tellen niet mee in de Stableford-teamscore (STB). Tik op "Muntjes" om daarop te sorteren.</p>`:''}
   <p style="font-size:.68rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Tik op een ronde-kolom om alleen op die ronde te sorteren, of op ${toonMuntjes?'het Stableford-totaal':'"Totaal"'} om terug te gaan.</p>
