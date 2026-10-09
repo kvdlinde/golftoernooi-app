@@ -461,7 +461,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.39.0';
+const APP_VERSION = '1.40.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -902,7 +902,7 @@ create table if not exists muntjes_scores (
   ronde_id uuid not null references toernooi_rondes(id) on delete cascade,
   speler_id uuid not null references spelers(id) on delete cascade,
   waarde int not null check (waarde between -9 and 9),
-  ingevoerd_door text default 'speler', -- speler | admin
+  ingevoerd_door text default 'speler', -- speler | medespeler | admin
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   unique(ronde_id, speler_id)
@@ -4339,10 +4339,15 @@ function scoreGridHtml(ctx){
   return `<div class="sc-grid" style="grid-template-columns:28px repeat(${kolomSpelers.length},1fr)">${cells}</div>`;
 }
 // MUNTJES SPEL op de gedeelde scorekaart: één regel helemaal onderaan, per
-// speler één vakje. Alleen je EIGEN vakje is invulbaar (keuzelijst); dat van
-// je flightgenoten zie je, maar kun je niet wijzigen. In een gesloten ronde
+// speler één vakje. Invulbaar (keuzelijst) zijn je EIGEN vakje en dat van elke
+// medespeler die je bovenaan hebt aangevinkt om ook scores voor in te voeren
+// (sinds v1.40.0; daarvoor alleen je eigen vakje). Niet-aangevinkte
+// flightgenoten zie je wel, maar kun je niet wijzigen. In een gesloten ronde
 // is alles alleen-lezen. De admin corrigeert via zijn eigen kaartweergave
 // (zie renderScoreBody).
+// Anders dan bij de holescores is er hier geen dubbele invoer met controle:
+// er is per speler één muntjesscore, en de laatste invoer geldt — of die nu
+// van de speler zelf, van een medespeler of van de admin komt.
 function scMuntjesWaarde(ctx, spelerId){
   const rij = (ctx.muntjes||[]).find(m=>m.speler_id===spelerId);
   return (rij && rij.waarde!=null) ? rij.waarde : null;
@@ -4355,13 +4360,31 @@ function muntjesKeuzeOptiesHtml(huidig){
 function scMagEigenMuntjesInvoeren(ctx){
   return !ctx.readOnly && !isAdmin() && !!ingelogdSpeler && ctx.spelerId===ingelogdSpeler.id;
 }
+// Mag de kijker de muntjesscore in deze kolom invullen? Zijn eigen kolom
+// altijd (zolang de ronde open is); die van een medespeler alleen als die
+// bovenaan is aangevinkt — precies dezelfde kolommen als waarin hij ook
+// holescores kan typen.
+function scMagMuntjesInvoerenVoorKolom(ctx, ci){
+  return scMagEigenMuntjesInvoeren(ctx) && scActieveKolommen(ctx).includes(ci);
+}
+// Het invoerveld van een kolom: 'scMuntEigen' voor je eigen kolom (en voor de
+// admin-kaart, die er maar één heeft), 'scMunt_<kolom>' voor een medespeler.
+function scMuntjesVeldId(ctx, ci){
+  return (ctx.kolomSpelers||[ctx.spelerId])[ci]===ctx.spelerId ? 'scMuntEigen' : 'scMunt_'+ci;
+}
 function scMuntjesRijHtml(ctx, kolomSpelers){
   const eigenInvoer = scMagEigenMuntjesInvoeren(ctx);
-  let row = `<div class="sc-munthdr">Muntjes Spel${eigenInvoer?' <span>vul na de laatste hole je eigen totaal in</span>':''}</div><div class="sc-hcell"><i class="munt-icoon"></i></div>`;
+  const ookMedespelers = eigenInvoer && scActieveMedespelerKolommen(ctx).length>0;
+  const uitleg = !eigenInvoer ? '' : ookMedespelers
+    ? ' <span>vul na de laatste hole de totalen in</span>'
+    : ' <span>vul na de laatste hole je eigen totaal in</span>';
+  let row = `<div class="sc-munthdr">Muntjes Spel${uitleg}</div><div class="sc-hcell"><i class="munt-icoon"></i></div>`;
   kolomSpelers.forEach((id,ci)=>{
     const w = scMuntjesWaarde(ctx, id);
-    if(id===ctx.spelerId && eigenInvoer){
-      row += `<div class="sc-muntcel"><select class="sc-munt" id="scMuntEigen" aria-label="Mijn muntjesscore" onchange="scMuntjesGewijzigd(this)">${muntjesKeuzeOptiesHtml(w)}</select></div>`;
+    if(scMagMuntjesInvoerenVoorKolom(ctx, ci)){
+      const eigen = id===ctx.spelerId;
+      const sp = eigen ? null : allSpelers.find(x=>x.id===id);
+      row += `<div class="sc-muntcel"><select class="sc-munt" id="${scMuntjesVeldId(ctx, ci)}" aria-label="${eigen?'Mijn muntjesscore':'Muntjesscore van '+esc(sp?sp.naam:'medespeler')}" onchange="scMuntjesGewijzigd(this, ${ci})">${muntjesKeuzeOptiesHtml(w)}</select></div>`;
     } else {
       row += `<div class="sc-fval${id===ctx.spelerId?' me':''}" id="scMuntVal_${ci}">${fmtMunt(w)}</div>`;
     }
@@ -4369,38 +4392,43 @@ function scMuntjesRijHtml(ctx, kolomSpelers){
   return row;
 }
 // Werkt (na een live melding) alleen de muntjesvakjes bij, zonder het raster
-// opnieuw op te bouwen. Het eigen invoerveld blijft ongemoeid zolang het de
-// focus heeft.
+// opnieuw op te bouwen. Een invoerveld blijft ongemoeid zolang het de focus
+// heeft.
 function scMuntjesVakjesBijwerken(ctx){
   (ctx.kolomSpelers||[ctx.spelerId]).forEach((id,ci)=>{
+    const w = scMuntjesWaarde(ctx, id);
     const el = document.getElementById('scMuntVal_'+ci);
-    if(el) el.textContent = fmtMunt(scMuntjesWaarde(ctx, id));
+    if(el) el.textContent = fmtMunt(w);
+    const sel = document.getElementById(scMuntjesVeldId(ctx, ci));
+    if(sel && document.activeElement!==sel) sel.value = w==null ? '' : String(w);
   });
-  const sel = document.getElementById('scMuntEigen');
-  if(sel && document.activeElement!==sel){
-    const w = scMuntjesWaarde(ctx, ctx.spelerId);
-    sel.value = w==null ? '' : String(w);
-  }
 }
 // Slaat de gekozen muntjesscore direct op (geen aparte opslaan-knop). Een
-// speler kan uitsluitend zijn eigen score zetten; de admin die van de speler
-// wiens kaart hij open heeft. "–" kiezen wist de score weer (= niet ingevuld).
-async function scMuntjesGewijzigd(sel){
+// speler kan zijn eigen score zetten en die van een aangevinkte medespeler
+// (ci = kolom op de gedeelde kaart); de admin die van de speler wiens kaart
+// hij open heeft (zonder ci). "–" kiezen wist de score weer (= niet ingevuld).
+async function scMuntjesGewijzigd(sel, ci){
   const ctx = window._scCtx;
   if(!ctx || !ctx.spelerId || !ctx.muntjesAan) return;
-  const vorige = scMuntjesWaarde(ctx, ctx.spelerId);
+  const kolomSpelers = ctx.kolomSpelers || [ctx.spelerId];
+  const doelId = (ci==null || isAdmin()) ? ctx.spelerId : kolomSpelers[ci];
+  if(!doelId) return;
+  const vorige = scMuntjesWaarde(ctx, doelId);
   const herstel = ()=>{ sel.value = vorige==null ? '' : String(vorige); };
-  if(!isAdmin() && !scMagEigenMuntjesInvoeren(ctx)){ herstel(); return; }
+  const voorMedespeler = doelId!==ctx.spelerId;
+  if(!isAdmin() && !(voorMedespeler ? scMagMuntjesInvoerenVoorKolom(ctx, ci) : scMagEigenMuntjesInvoeren(ctx))){ herstel(); return; }
   const waarde = sel.value==='' ? null : parseInt(sel.value,10);
   if(waarde!=null && (isNaN(waarde) || waarde<MUNTJES_MIN || waarde>MUNTJES_MAX)){
     herstel(); toast('Een muntjesscore ligt tussen '+MUNTJES_MIN+' en +'+MUNTJES_MAX, true); return;
   }
   sel.disabled = true;
   try{
-    const rij = await slaMuntjesScoreOp(ctx.rondeId, ctx.spelerId, waarde, isAdmin()?'admin':'speler');
-    ctx.muntjes = (ctx.muntjes||[]).filter(m=>m.speler_id!==ctx.spelerId);
+    const rij = await slaMuntjesScoreOp(ctx.rondeId, doelId, waarde, isAdmin()?'admin':(voorMedespeler?'medespeler':'speler'));
+    ctx.muntjes = (ctx.muntjes||[]).filter(m=>m.speler_id!==doelId);
     if(rij) ctx.muntjes.push(rij);
-    toast(waarde==null ? 'Muntjesscore gewist' : 'Muntjesscore opgeslagen: '+fmtMunt(waarde));
+    const sp = voorMedespeler ? allSpelers.find(x=>x.id===doelId) : null;
+    const voor = voorMedespeler ? ' voor '+((sp?sp.naam:'medespeler').split(' ')[0]) : '';
+    toast(waarde==null ? 'Muntjesscore'+voor+' gewist' : 'Muntjesscore'+voor+' opgeslagen: '+fmtMunt(waarde));
   }catch(e){
     herstel();
     toast('Muntjesscore opslaan mislukt: '+e.message, true);
