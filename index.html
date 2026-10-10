@@ -343,6 +343,8 @@ input.sp-kies,.sp-kiesalles input{width:20px;height:20px;flex-shrink:0;margin:1p
 .weg-lijst li{padding:8px 12px;border-bottom:1px solid var(--cd)}
 .weg-lijst li:last-child{border-bottom:none}
 .weg-lijst li span{display:block;font-size:.74rem;color:var(--tl)}
+.db-melding{background:#fdf1d8;border:1.5px solid var(--gold);border-radius:var(--r);padding:11px 13px;margin-bottom:12px;font-family:'Inter',sans-serif;font-size:.82rem;line-height:1.4;color:var(--td)}
+.db-melding>b:first-child{display:block;margin-bottom:3px;color:var(--gd)}
 /* Op desktop breekt de Spelers-tabel uit de smalle (mobiel-georiënteerde) .main-kolom
    zodat de Acties-kolom nooit buiten beeld valt — i.p.v. horizontaal te moeten scrollen. */
 @media (min-width:700px){
@@ -507,7 +509,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.47.0';
+const APP_VERSION = '1.47.1';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -3202,6 +3204,13 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   // Zonder toernooi koppelt een Toernooi Admin aan zijn eigen spelerslijst.
   const naarLijst = !toernooiId;
   const kanKoppelen = !!toernooiId || (isToernooiAdmin() && SPELERSLIJST_AAN);
+  // Koppelen zonder toernooi kan pas als de tabel voor de eigen spelerslijst
+  // bestaat (migratie-1.46.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
+  // al bij het verlaten van het veld, anders lijkt het alsof er niets gebeurt.
+  const kanNietKoppelen = wat => {
+    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.46.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
+    return null;
+  };
   const bekend = sp => beheerSpelers().some(x=>x.id===sp.id);
   const doetAlMee = sp => naarLijst ? bekend(sp) : allDeelnemers.some(d=>d.toernooi_id===toernooiId && d.speler_id===sp.id);
   const alMeeTekst = sp => sp.naam+(naarLijst ? ' staat al in je spelerslijst' : ' doet al mee aan dit toernooi');
@@ -3225,7 +3234,7 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
     }
     if(treffer){
       const zelfdeNaam = !naam || naamSleutel(treffer.naam)===naamSleutel(naam);
-      if(!kanKoppelen) return meld('Dit e-mailadres staat al in Rondje!. Voeg deze speler toe bij je toernooi, via "+ Deelnemer".');
+      if(!kanKoppelen) return kanNietKoppelen('Dit e-mailadres');
       const sleutelE = 'email:'+emailSleutel(email);
       if(doetAlMee(treffer)){
         if(zelfdeNaam){ toast(alMeeTekst(treffer), true); return null; }
@@ -3257,7 +3266,7 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   if(!naam) return null;
   const bestaand = allSpelers.find(sp=>naamSleutel(sp.naam)===naamSleutel(naam));
   if(bestaand){
-    if(!kanKoppelen) return meld('Deze naam staat al in Rondje!. Voeg deze speler toe bij je toernooi, via "+ Deelnemer".');
+    if(!kanKoppelen) return kanNietKoppelen('Deze naam');
     if(doetAlMee(bestaand)){ toast(alMeeTekst(bestaand), true); return null; }
     const alBekend = bekend(bestaand);
     const sleutelN = 'naam:'+naamSleutel(naam);
@@ -4022,6 +4031,9 @@ function renderBeheerSpelersPanel(){
       <button class="btn bp bsm" onclick="openSpelerModal()">+ Speler</button>
     </div>
   </div>
+  ${(ROLLEN_AAN && !SPELERSLIJST_AAN)?`<div class="db-melding" id="dbMelding"><b>Database nog niet bijgewerkt</b>${ta
+      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.46.0.sql</b> uit te voeren in Supabase.'
+      : 'Voer <b>migratie-1.46.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
   ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet de spelers van je eigen toernooien en de spelers die je zelf hebt toegevoegd. Van een speler die ook bij andere beheerders bekend is ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
   <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
   ${spelers.map(s=>{
@@ -4152,10 +4164,7 @@ function beheerdersKaartHtml(){
       <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Toernooi Admins en samenvoegen</b>
       <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.46.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
     </div></div>`;
-  return `${SPELERSLIJST_AAN?'':`<div class="card" style="margin-top:18px"><div class="cb">
-      <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Eigen spelerslijst voor Toernooi Admins</b>
-      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Voer eenmalig het bestand <b>migratie-1.46.0.sql</b> uit in Supabase (SQL Editor). Daarna kan een Toernooi Admin een bestaande speler aan zijn lijst toevoegen zonder dat hij al een toernooi heeft. Tot dan kan dat alleen via "+ Deelnemer" bij een toernooi.</p>
-    </div></div>`}<div class="card" style="margin-top:18px">
+  return `<div class="card" style="margin-top:18px">
     <div class="ch"><div><div class="ct">Beheerders</div><div class="rm">Een Super Admin mag alles. Een Toernooi Admin beheert alleen zijn eigen en toegewezen toernooien.</div></div>
       <button class="btn bp bsm" style="flex-shrink:0" onclick="openBeheerderModal()">+ Beheerder</button></div>
     <div class="cb" style="padding-top:4px;padding-bottom:4px">
