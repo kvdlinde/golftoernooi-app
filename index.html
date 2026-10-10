@@ -38,12 +38,30 @@ html,body{height:100%;overflow-x:hidden}
 body{font-family:'IBM Plex Sans','Inter',sans-serif;background:var(--cr);color:var(--td);padding-bottom:calc(var(--nh) + env(safe-area-inset-bottom))}
 
 /* HEADER */
-.hdr{background:var(--gd);position:fixed;top:0;left:0;right:0;height:var(--hh);z-index:200;box-shadow:var(--sh);display:flex;align-items:center;justify-content:space-between;padding:0 16px;padding-top:env(safe-area-inset-top)}
+.hdr{background:var(--gd);position:fixed;top:0;left:0;right:0;height:var(--hh);z-index:200;box-shadow:var(--sh);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px;padding-top:env(safe-area-inset-top)}
 .logo-t{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:900;color:var(--gold)}
 .logo-s{font-family:'IBM Plex Mono',monospace;font-size:0.6rem;color:rgba(200,230,200,0.65);letter-spacing:.08em;text-transform:uppercase;display:block;margin-top:-1px}
-.hdr-r{display:flex;gap:8px;align-items:center}
+.hdr-r{display:flex;gap:8px;align-items:center;min-width:0}
 .adm-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:var(--cr);font-family:'IBM Plex Mono',monospace;font-size:.7rem;padding:7px 13px;border-radius:20px;cursor:pointer}
-.adm-badge{background:var(--gold);color:var(--gd);font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:5px 11px;border-radius:20px;font-weight:700;border:none;cursor:pointer}
+.adm-badge{background:var(--gold);color:var(--gd);font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:5px 11px;border-radius:20px;font-weight:700;border:none;cursor:pointer;max-width:42vw;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Beheerders (Super Admin / Toernooi Admin) — lijst onder de spelerstabel */
+.bh-rij{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--cd)}
+.bh-rij:last-child{border-bottom:none}
+.bh-naam{font-family:'Inter',sans-serif;font-weight:700;font-size:.9rem;color:var(--td)}
+.sp.s-super{background:var(--gd);color:var(--gold)}
+.sp.s-ta{background:var(--purplel);color:var(--purple)}
+.sp.s-gedeeld{background:var(--bluel);color:var(--blue);font-size:.68rem;padding:3px 8px}
+.of-lijn{display:flex;align-items:center;gap:10px;margin:14px 0;font-family:'Inter',sans-serif;font-size:.72rem;color:var(--tl);text-transform:uppercase;letter-spacing:.06em}
+.of-lijn::before,.of-lijn::after{content:'';flex:1;height:1px;background:var(--cd)}
+.login-link{display:block;margin:14px auto 0;background:none;border:none;color:var(--gm);font-family:'Inter',sans-serif;font-size:.82rem;font-weight:600;text-decoration:underline;cursor:pointer;padding:8px 12px}
+.dn-lijst{border:1.5px solid var(--cd);border-radius:var(--r);background:var(--wh);max-height:206px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:11px}
+.dn-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--cd);padding:10px 12px;cursor:pointer;font-family:'Inter',sans-serif;color:var(--td)}
+.dn-item:last-child{border-bottom:none}
+.dn-item:active{background:var(--cr)}
+.dn-item .dn-n{font-size:.9rem;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dn-item .dn-e{display:block;font-size:.74rem;font-weight:400;color:var(--tl);overflow:hidden;text-overflow:ellipsis}
+.dn-item .dn-plus{flex-shrink:0;font-size:.74rem;font-weight:700;color:var(--gm);white-space:nowrap}
+.dn-leeg{padding:12px;font-family:'Inter',sans-serif;font-size:.8rem;color:var(--tl);font-style:italic}
 
 /* BOTTOM NAV */
 .bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nh);padding-bottom:env(safe-area-inset-bottom);background:var(--gd);display:flex;z-index:200;box-shadow:0 -2px 20px rgba(0,0,0,.2)}
@@ -104,13 +122,6 @@ tr:last-child td{border-bottom:none}
 .fg label{font-size:.68rem;font-weight:600;color:var(--tm);letter-spacing:.04em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace}
 .fg input,.fg select,.fg textarea{padding:12px 13px;border:1.5px solid var(--cd);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:1rem;color:var(--td);background:var(--cr);width:100%;-webkit-appearance:none}
 .fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--gl);background:var(--wh)}
-.fg.af-wrap{position:relative}
-.fg.af-wrap select{position:relative;z-index:1}
-/* Onzichtbaar tekstveld ACHTER de naam-keuzelijst: wachtwoordbeheer (Chrome,
-   Samsung Pass) kan een <select> niet als gebruikersnaam lezen of invullen.
-   Bewust niet display:none / 1px — het veld moet voor de browser een gewoon,
-   'echt' invoerveld blijven; alleen onzichtbaar en niet aan te tikken. */
-.fg input.af-spiegel{position:absolute;left:0;right:0;bottom:0;height:44px;opacity:0;pointer-events:none;z-index:0}
 .fg .hint{font-size:.7rem;color:var(--tl);font-family:'Inter',sans-serif;font-weight:400;text-transform:none;letter-spacing:0}
 .fg .hh-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .fg label.hh-box{display:flex;align-items:center;gap:7px;font-size:.82rem;font-weight:600;text-transform:none;letter-spacing:0;font-family:'IBM Plex Sans',sans-serif;color:var(--td);border:1.5px solid var(--cd);border-radius:var(--r);padding:8px 12px;cursor:pointer;background:var(--cr);transition:background .12s,border-color .12s,color .12s;user-select:none}
@@ -235,7 +246,12 @@ tr:last-child td{border-bottom:none}
 .ronde-winnaar .rw-naam{font-size:.95rem;font-weight:700;color:var(--gd)}
 .ronde-winnaar .rw-naam i{font-style:normal;font-weight:400;color:var(--tl)}
 .ronde-winnaar .rw-sub{font-size:.8rem;color:var(--tl);margin-top:1px}
-.kls-telt{display:block;font-family:'Inter',sans-serif;font-size:.68rem;font-weight:600;color:var(--tl);line-height:1.25;margin-top:1px;white-space:nowrap}
+/* Ronde met "klassement: regulier": twee cijfers naast elkaar, gescheiden door
+   een schuine streep — links de ronde-uitslag volgens de afwijkende scoring,
+   rechts (ingetogener) de reguliere score waarmee de ronde in het totaal telt.
+   Bijvoorbeeld 27 / 35. Het paar breekt nooit over twee regels. */
+.kls-paar{white-space:nowrap}
+.kls-sl{color:var(--tl);font-weight:400}
 /* Muntjescijfer in het klassement: bewust kleiner en in een eigen kleur, zodat
    het nooit voor een Stableford-cijfer wordt aangezien. */
 .kls-munt{display:block;font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:600;color:#8a6d1c;line-height:1.25;margin-top:1px;white-space:nowrap}
@@ -412,7 +428,7 @@ pre.sqlbox{background:rgba(0,0,0,.25);border-radius:8px;padding:12px;font-family
 <body>
 
 <div class="hdr">
-  <div style="display:flex;align-items:center;gap:8px">
+  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
     <img src="data:image/png;base64,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" alt="Rondje!" style="height:36px;width:36px;border-radius:9px;flex-shrink:0">
     <div style="display:flex;flex-direction:column;line-height:1.15">
       <span class="logo-t">Rondje!</span>
@@ -482,7 +498,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.41.0';
+const APP_VERSION = '1.45.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -500,7 +516,7 @@ if('serviceWorker' in navigator){
 
 /* ---------- GLOBALE STATE ---------- */
 let ingelogdSpeler = null;   // {id, naam, email, exact_hcp, actief}
-let ingelogdAdmin  = null;   // {id, naam}
+let ingelogdAdmin  = null;   // {id, naam, rol}
 let allBanen = [], allLussen = [], allCombinaties = [], allTees = [];
 let allSpelers = [], allToernooien = [], allRondes = [], allDeelnemers = [], allExtraPrijzen = [];
 let allTeams = [], allTeamLeden = [];
@@ -509,6 +525,88 @@ let huidigToernooiDetailId = null; // laatst geopende toernooi-detail — nodig 
 
 function isAdmin(){ return !!ingelogdAdmin; }
 function isIngelogd(){ return !!ingelogdSpeler || !!ingelogdAdmin; }
+
+/* ---------- ROLLEN: SUPER ADMIN EN TOERNOOI ADMIN (sinds v1.44.0) ----------
+   - Super Admin: mag alles zien en aanpassen (zoals 'de admin' altijd al).
+   - Toernooi Admin: een eigen beheeraccount (naam + wachtwoord) dat alleen
+     de toernooien beheert die hij zelf heeft aangemaakt of die de Super
+     Admin aan hem heeft toegewezen (tabel 'toernooi_admins'). Hij ziet alle
+     banen, maar van de spelers alleen wie aan zijn toernooien meedoet.
+   isAdmin() blijft waar voor BEIDE rollen; alles wat alleen de Super Admin
+   mag, vraagt isSuperAdmin().
+   LET OP: dit is afscherming in het scherm. De database zelf staat voor de
+   app open (zie de opmerking bij de policies in getSQL); wie de sleutel uit de
+   broncode gebruikt, kan er nog steeds bij.
+   Zolang de migratie van v1.44.0 niet is gedraaid (ROLLEN_AAN = false) werkt
+   alles zoals voorheen: elk beheeraccount is dan Super Admin. */
+let allAdmins = [], allToernooiAdmins = [];
+let ROLLEN_AAN = false;
+function adminRol(a){ return (a && a.rol==='toernooi') ? 'toernooi' : 'super'; }
+function isSuperAdmin(){ return !!ingelogdAdmin && (!ROLLEN_AAN || adminRol(ingelogdAdmin)==='super'); }
+function isToernooiAdmin(){ return !!ingelogdAdmin && !isSuperAdmin(); }
+function rolLabel(a){ return !ROLLEN_AAN ? 'Admin' : adminRol(a)==='toernooi' ? 'Toernooi Admin' : 'Super Admin'; }
+// De toernooien die de ingelogde Toernooi Admin beheert.
+function beheerToernooiIds(){
+  return new Set(ingelogdAdmin ? allToernooiAdmins.filter(x=>x.admin_id===ingelogdAdmin.id).map(x=>x.toernooi_id) : []);
+}
+function magToernooiBeheren(toernooiId){ return isSuperAdmin() || (isToernooiAdmin() && beheerToernooiIds().has(toernooiId)); }
+function beheerToernooien(){
+  if(isSuperAdmin()) return allToernooien;
+  if(!isToernooiAdmin()) return [];
+  const ids = beheerToernooiIds();
+  return allToernooien.filter(t=>ids.has(t.id));
+}
+// Verwijderen mag een Toernooi Admin alleen bij een toernooi dat hij zelf
+// heeft aangemaakt; een toegewezen toernooi kan hij bewerken, niet weggooien.
+function magToernooiVerwijderen(t){
+  return isSuperAdmin() || (isToernooiAdmin() && !!t && t.aangemaakt_door===ingelogdAdmin.id && beheerToernooiIds().has(t.id));
+}
+// De spelers die de ingelogde beheerder mag zien: de Super Admin iedereen, een
+// Toernooi Admin alleen wie aan een van zijn toernooien meedoet, plus spelers
+// die hij zelf heeft aangemaakt en nog nergens heeft ingedeeld.
+function beheerSpelers(){
+  if(isSuperAdmin()) return allSpelers;
+  if(!isToernooiAdmin()) return [];
+  const ids = beheerToernooiIds();
+  const inMijn = new Set(allDeelnemers.filter(d=>ids.has(d.toernooi_id)).map(d=>d.speler_id));
+  return allSpelers.filter(sp=>inMijn.has(sp.id) || sp.aangemaakt_door===ingelogdAdmin.id);
+}
+// Doet deze speler UITSLUITEND mee aan toernooien van de ingelogde Toernooi
+// Admin? Alleen dan mag die zijn naam, e-mail, status en pincode aanpassen —
+// anders zou hij via een pincode-reset bij andermans toernooien kunnen.
+function spelerUitsluitendEigen(spelerId){
+  if(isSuperAdmin()) return true;
+  if(!isToernooiAdmin()) return false;
+  const ids = beheerToernooiIds();
+  const rijen = allDeelnemers.filter(d=>d.speler_id===spelerId);
+  if(!rijen.length){ const sp = allSpelers.find(x=>x.id===spelerId); return !!sp && sp.aangemaakt_door===ingelogdAdmin.id; }
+  return rijen.every(d=>ids.has(d.toernooi_id));
+}
+// Banen: iedereen ziet ze allemaal. Een Toernooi Admin mag er nieuwe aan
+// toevoegen en zijn EIGEN banen/tees bewerken; een bestaande baan van een
+// ander kan hij gebruiken en van een extra tee voorzien, maar niet wijzigen
+// (een andere par of stroke index werkt door in andermans toernooi).
+function magBaanBewerken(baan){ return isSuperAdmin() || (isToernooiAdmin() && !!baan && baan.aangemaakt_door===ingelogdAdmin.id); }
+function magTeeBewerken(tee, baan){ return magBaanBewerken(baan) || (isToernooiAdmin() && !!tee && tee.aangemaakt_door===ingelogdAdmin.id); }
+// Legt vast wie iets aanmaakt (kolom 'aangemaakt_door', pas na de migratie).
+function metMaker(velden){ return (ROLLEN_AAN && ingelogdAdmin) ? {...velden, aangemaakt_door: ingelogdAdmin.id} : velden; }
+function geenRechten(){ toast('Daar heb je als Toernooi Admin geen rechten voor — vraag de Super Admin.', true); }
+// Namen vergelijken zonder op hoofdletters en dubbele spaties te letten.
+function naamSleutel(n){ return String(n==null?'':n).trim().replace(/\s+/g,' ').toLowerCase(); }
+// Losser dan naamSleutel: ook accenten, punten, apostroffen en streepjes tellen
+// niet mee ("André" = "andre", "Jan-Willem" = "jan willem"). Alleen gebruikt als
+// vangnet bij het inloggen, en alleen als er precies één speler bij past.
+function naamLos(n){
+  return naamSleutel(String(n==null?'':n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[.'’`]/g,'').replace(/[-‐‑–]/g,' '));
+}
+function emailSleutel(e){ return String(e==null?'':e).trim().toLowerCase(); }
+function emailGeldig(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e==null?'':e).trim()); }
+// Spelers (behalve 'behalveId') die dit e-mailadres al hebben.
+function spelersMetEmail(email, behalveId){
+  const sleutel = emailSleutel(email);
+  if(!sleutel) return [];
+  return allSpelers.filter(sp=>sp.id!==behalveId && sp.email && emailSleutel(sp.email)===sleutel);
+}
 
 /* ---------- HOLE ALLOCATIE (WHS-methode) ---------- */
 // Hoeveel slagen krijgt/geeft een speler op een hole met gegeven stroke index (1-18),
@@ -578,41 +676,10 @@ function dagenVerschuiven(datumStr, n){
   d.setDate(d.getDate()+n);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-// Scopen van het inlogscherm: een speler staat alleen in de naamlijst als hij
-// deelnemer is aan minstens één toernooi waarvan het datumvenster nu actief
-// is — vanaf 7 dagen vóór de eerste ronde t/m 24 uur na de laatste ronde.
-// Een toernooi zonder rondedatums (nog) blokkeert niet (fail-open), zodat een
-// vergeten datum nooit per ongeluk iemand van inloggen uitsluit. Dit is puur
-// voor de leesbaarheid van het inlogscherm — eenmaal ingelogd ziet een speler
-// via mijnToernooien() gewoon al zijn toernooien, ongeacht dit venster.
-function speelbaarVoorLogin(spelerId){
-  const mijnToernooiIds = allDeelnemers.filter(d=>d.speler_id===spelerId).map(d=>d.toernooi_id);
-  if(!mijnToernooiIds.length) return false;
-  const vandaag = vandaagStr();
-  return mijnToernooiIds.some(tId=>{
-    const datums = allRondes.filter(r=>r.toernooi_id===tId && r.datum).map(r=>r.datum).sort();
-    if(!datums.length) return true;
-    const vanaf = dagenVerschuiven(datums[0], -7);
-    const totEnMet = dagenVerschuiven(datums[datums.length-1], 1);
-    return vandaag >= vanaf && vandaag <= totEnMet;
-  });
-}
-// Voor automatisch uitloggen: true als ALLE toernooien van deze speler meer
-// dan 24 uur geleden zijn afgelopen. Kijkt bewust alleen naar het einde van
-// het venster (niet het begin zoals speelbaarVoorLogin) — een toernooi dat
-// nog moet beginnen, of waarvan de rondes (nog) geen datum hebben, mag nooit
-// iemand uitloggen. Iemand zonder toernooien wordt hierom ook nooit uitgelogd.
-function spelerToernooienAfgelopen(spelerId){
-  const mijnToernooiIds = allDeelnemers.filter(d=>d.speler_id===spelerId).map(d=>d.toernooi_id);
-  if(!mijnToernooiIds.length) return false;
-  const vandaag = vandaagStr();
-  return mijnToernooiIds.every(tId=>{
-    const datums = allRondes.filter(r=>r.toernooi_id===tId && r.datum).map(r=>r.datum).sort();
-    if(!datums.length) return false;
-    const totEnMet = dagenVerschuiven(datums[datums.length-1], 1);
-    return vandaag > totEnMet;
-  });
-}
+// Sinds v1.45.0 is er geen tijdvenster meer voor spelers: er staat geen
+// namenlijst meer op het inlogscherm (je typt je naam), dus een speler kan
+// altijd inloggen en zijn toernooien en uitslagen terugkijken. Wat hij nog kan
+// wijzigen wordt bepaald door de status van de ronde (open / gesloten).
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ---------- TOAST ---------- */
@@ -980,6 +1047,153 @@ do $$ begin
   alter publication supabase_realtime add table muntjes_scores;
 exception when duplicate_object then null; when undefined_object then null;
 end $$;
+
+-- ===== v1.44.0: Super Admin / Toernooi Admin, spelers koppelen en samenvoegen =====
+-- 1. Rollen. Bestaande beheeraccounts worden Super Admin (mogen alles, zoals nu).
+--    Een Toernooi Admin ('toernooi') beheert alleen de toernooien die aan hem
+--    zijn toegewezen of die hij zelf heeft aangemaakt.
+alter table admins add column if not exists rol text not null default 'super';
+
+-- 2. Welke Toernooi Admin welk toernooi beheert.
+create table if not exists toernooi_admins (
+  id uuid default gen_random_uuid() primary key,
+  toernooi_id uuid not null references toernooien(id) on delete cascade,
+  admin_id uuid not null references admins(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique(toernooi_id, admin_id)
+);
+alter table toernooi_admins enable row level security;
+drop policy if exists "allow all" on toernooi_admins; create policy "allow all" on toernooi_admins for all using (true);
+
+-- 3. Wie iets heeft aangemaakt. Leeg bij alles wat al bestond (= van de Super Admin).
+--    Bepaalt wat een Toernooi Admin mag bewerken of verwijderen.
+alter table toernooien add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
+alter table spelers    add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
+alter table banen      add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
+alter table tees       add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
+
+-- 4. Spelers samenvoegen (alleen de Super Admin gebruikt dit, via de knop
+--    "Samenvoegen" bij Spelers). Alles van de speler die verdwijnt (p_bron) gaat
+--    naar de speler die blijft (p_doel): scorekaarten, invoeren, deelnames,
+--    startlijsten, teams, muntjes en gewonnen prijzen. Naam, handicap, pincode
+--    en e-mail van de speler die blijft veranderen niet.
+--    Het gebeurt in één keer: gaat er iets mis, dan verandert er niets.
+--    Hebben beide spelers in dezelfde ronde een ingevulde scorekaart, dan stopt
+--    de functie met een melding — dat moet je eerst zelf oplossen.
+create or replace function rondje_kaart_ingevuld(p_holes jsonb) returns boolean
+language sql immutable as $$
+  select p_holes is not null and jsonb_typeof(p_holes) = 'array'
+     and exists (select 1 from jsonb_array_elements(p_holes) e where jsonb_typeof(e) <> 'null');
+$$;
+
+create or replace function voeg_spelers_samen(p_bron uuid, p_doel uuid) returns jsonb
+language plpgsql as $$
+declare
+  v_conflict text;
+  v_bron_rondes uuid[];   -- rondes waarin de kaart van p_bron de ingevulde is (en dus blijft)
+  n_kaarten int := 0; n_invoer int := 0; n_tmp int := 0; n_deelnames int := 0;
+  n_flights int := 0; n_teams int := 0; n_muntjes int := 0; n_prijzen int := 0;
+begin
+  if p_bron is null or p_doel is null then raise exception 'Kies twee spelers.'; end if;
+  if p_bron = p_doel then raise exception 'Kies twee verschillende spelers.'; end if;
+  perform 1 from spelers where id = p_bron for update;
+  if not found then raise exception 'De speler die moet verdwijnen bestaat niet (meer).'; end if;
+  perform 1 from spelers where id = p_doel for update;
+  if not found then raise exception 'De speler die moet blijven bestaat niet (meer).'; end if;
+
+  -- Scorekaarten: beide een ingevulde kaart in dezelfde ronde -> niet samenvoegen.
+  select string_agg(r.naam, ', ' order by r.volgorde) into v_conflict
+    from scores a
+    join scores b on b.ronde_id = a.ronde_id and b.speler_id = p_doel
+    join toernooi_rondes r on r.id = a.ronde_id
+   where a.speler_id = p_bron and rondje_kaart_ingevuld(a.hole_scores) and rondje_kaart_ingevuld(b.hole_scores);
+  if v_conflict is not null then
+    raise exception 'Beide spelers hebben een ingevulde scorekaart in dezelfde ronde (%). Maak eerst een van die twee kaarten leeg en probeer het dan opnieuw.', v_conflict;
+  end if;
+
+  select coalesce(array_agg(ronde_id), '{}') into v_bron_rondes
+    from scores where speler_id = p_bron and rondje_kaart_ingevuld(hole_scores);
+
+  -- Lege dubbele kaarten weg (uniek per ronde + speler), daarna de rest overzetten.
+  delete from scores a where a.speler_id = p_bron and not rondje_kaart_ingevuld(a.hole_scores)
+     and exists (select 1 from scores b where b.ronde_id = a.ronde_id and b.speler_id = p_doel);
+  delete from scores b where b.speler_id = p_doel
+     and exists (select 1 from scores a where a.ronde_id = b.ronde_id and a.speler_id = p_bron);
+  update scores set speler_id = p_doel where speler_id = p_bron;
+  get diagnostics n_kaarten = row_count;
+
+  -- Invoeren op de gedeelde scorekaart: eerst "voor wie", dan "door wie".
+  -- Botst een rij met een bestaande, dan blijft de rij die hoort bij de kaart
+  -- die blijft: in v_bron_rondes die van p_bron, anders die van p_doel.
+  delete from score_holes_log b where b.speler_id = p_doel and b.ronde_id = any(v_bron_rondes)
+     and exists (select 1 from score_holes_log a where a.speler_id = p_bron and a.ronde_id = b.ronde_id
+                 and a.hole_index = b.hole_index and a.door_speler_id = b.door_speler_id);
+  delete from score_holes_log a where a.speler_id = p_bron
+     and exists (select 1 from score_holes_log b where b.speler_id = p_doel and b.ronde_id = a.ronde_id
+                 and b.hole_index = a.hole_index and b.door_speler_id = a.door_speler_id);
+  update score_holes_log set speler_id = p_doel where speler_id = p_bron;
+  get diagnostics n_invoer = row_count;
+
+  delete from score_holes_log b where b.door_speler_id = p_doel and b.ronde_id = any(v_bron_rondes)
+     and exists (select 1 from score_holes_log a where a.door_speler_id = p_bron and a.ronde_id = b.ronde_id
+                 and a.hole_index = b.hole_index and a.speler_id = b.speler_id);
+  delete from score_holes_log a where a.door_speler_id = p_bron
+     and exists (select 1 from score_holes_log b where b.door_speler_id = p_doel and b.ronde_id = a.ronde_id
+                 and b.hole_index = a.hole_index and b.speler_id = a.speler_id);
+  update score_holes_log set door_speler_id = p_doel where door_speler_id = p_bron;
+  get diagnostics n_tmp = row_count;
+  n_invoer := n_invoer + n_tmp;
+
+  -- Deelnames (uniek per toernooi + speler).
+  delete from toernooi_deelnemers a where a.speler_id = p_bron
+     and exists (select 1 from toernooi_deelnemers b where b.toernooi_id = a.toernooi_id and b.speler_id = p_doel);
+  update toernooi_deelnemers set speler_id = p_doel where speler_id = p_bron;
+  get diagnostics n_deelnames = row_count;
+
+  -- Startlijsten: staat de speler die blijft al in die ronde, dan blijft zijn plek.
+  delete from ronde_flight_spelers a using ronde_flights fa
+   where fa.id = a.flight_id and a.speler_id = p_bron
+     and exists (select 1 from ronde_flight_spelers b join ronde_flights fb on fb.id = b.flight_id
+                  where b.speler_id = p_doel and fb.ronde_id = fa.ronde_id);
+  update ronde_flight_spelers set speler_id = p_doel where speler_id = p_bron;
+  get diagnostics n_flights = row_count;
+
+  -- Teams: per toernooi één standaardindeling, per ronde hooguit één uitzondering.
+  delete from team_leden a where a.speler_id = p_bron and a.ronde_id is not null
+     and exists (select 1 from team_leden b where b.speler_id = p_doel and b.ronde_id = a.ronde_id);
+  delete from team_leden a where a.speler_id = p_bron and a.ronde_id is null
+     and exists (select 1 from team_leden b join teams tb on tb.id = b.team_id join teams ta on ta.id = a.team_id
+                  where b.speler_id = p_doel and b.ronde_id is null and tb.toernooi_id = ta.toernooi_id);
+  update team_leden set speler_id = p_doel where speler_id = p_bron;
+  get diagnostics n_teams = row_count;
+
+  -- Muntjes Spel (uniek per ronde + speler). De tabel bestaat pas sinds v1.35.0.
+  begin
+    delete from muntjes_scores b where b.speler_id = p_doel and b.ronde_id = any(v_bron_rondes)
+       and exists (select 1 from muntjes_scores a where a.ronde_id = b.ronde_id and a.speler_id = p_bron);
+    delete from muntjes_scores a where a.speler_id = p_bron
+       and exists (select 1 from muntjes_scores b where b.ronde_id = a.ronde_id and b.speler_id = p_doel);
+    update muntjes_scores set speler_id = p_doel where speler_id = p_bron;
+    get diagnostics n_muntjes = row_count;
+  exception when undefined_table then n_muntjes := 0;
+  end;
+
+  -- Gewonnen prijzen (Neary/Leary/Longest).
+  update ronde_extra_prijzen set winnaar_speler_id = p_doel where winnaar_speler_id = p_bron;
+  get diagnostics n_prijzen = row_count;
+
+  delete from spelers where id = p_bron;
+
+  return jsonb_build_object('kaarten', n_kaarten, 'invoeren', n_invoer, 'deelnames', n_deelnames,
+                            'startlijsten', n_flights, 'teams', n_teams, 'muntjes', n_muntjes, 'prijzen', n_prijzen);
+end;
+$$;
+
+-- 5. De app mag de samenvoegfunctie aanroepen, en ziet de nieuwe velden meteen.
+do $$ begin
+  grant execute on function voeg_spelers_samen(uuid, uuid) to anon, authenticated;
+exception when undefined_object then null; end $$;
+notify pgrst, 'reload schema';
 `;}
 
 function renderSetupPanel(){
@@ -1120,19 +1334,16 @@ async function boot(){
   if(spId){
     ingelogdSpeler = allSpelers.find(s=>s.id===spId) || null;
     if(!ingelogdSpeler) localStorage.removeItem('speler_id');
-    else if(spelerToernooienAfgelopen(ingelogdSpeler.id)){
-      // Alle toernooien van deze speler zijn meer dan 24 uur geleden afgelopen
-      // — automatisch uitloggen i.p.v. de sessie te herstellen.
-      ingelogdSpeler = null;
-      localStorage.removeItem('speler_id');
-      toast('Je bent automatisch uitgelogd — je toernooi is afgelopen.');
-    }
   }
   if(adNaam){
     // Admin-sessie: we bewaren alleen de naam lokaal; echte check gebeurt bij gevoelige acties niet opnieuw
     // (eenvoudige MVP-aanpak — zie opmerking bij setup over edge functions voor hardening)
-    const rec = await sbG('admins','naam=eq.'+encodeURIComponent(adNaam)+'&select=id,naam').catch(()=>[]);
-    if(rec && rec[0]) ingelogdAdmin = rec[0];
+    let rec = allAdmins.find(a=>a.naam===adNaam) || null;
+    if(!rec && !allAdmins.length){
+      const rijen = await sbG('admins','naam=eq.'+encodeURIComponent(adNaam)+'&select=id,naam').catch(()=>[]);
+      rec = (rijen && rijen[0]) || null;
+    }
+    if(rec){ ingelogdAdmin = rec; localStorage.setItem('laatste_admin_naam', rec.naam); }
     else localStorage.removeItem('admin_naam');
   }
   renderHeader();
@@ -1145,29 +1356,30 @@ async function boot(){
     document.getElementById('panel-login').classList.add('active');
     renderLoginPanel();
   }
-  startSpelerVervalCheck();
-}
-// Vangt het geval dat iemand het tabblad gewoon open laat staan tot ver na
-// afloop van zijn toernooi (zonder de app opnieuw te laden, wat bovenstaande
-// check bij boot() al afvangt) — elke 30 minuten opnieuw checken.
-let spelerVervalCheckTimer = null;
-function startSpelerVervalCheck(){
-  if(spelerVervalCheckTimer) return;
-  spelerVervalCheckTimer = setInterval(()=>{
-    if(ingelogdSpeler && spelerToernooienAfgelopen(ingelogdSpeler.id)){
-      toast('Je bent automatisch uitgelogd — je toernooi is afgelopen.');
-      logoutSpeler();
-    }
-  }, 30*60*1000);
 }
 
+// Beheeraccounts (zonder wachtwoord-hash) en de toewijzing van toernooien aan
+// Toernooi Admins. Lukt dat niet, dan is de migratie van v1.44.0 nog niet
+// gedraaid: ROLLEN_AAN blijft uit en de app gedraagt zich zoals voorheen.
+async function laadRollen(){
+  try{
+    const [admins, toewijzingen] = await Promise.all([sbG('admins','select=id,naam,rol&order=naam'), sbG('toernooi_admins','')]);
+    allAdmins = admins||[]; allToernooiAdmins = toewijzingen||[]; ROLLEN_AAN = true;
+  }catch(e){
+    ROLLEN_AAN = false; allToernooiAdmins = [];
+    try{ allAdmins = await sbG('admins','select=id,naam&order=naam') || []; }catch(e2){ allAdmins = []; }
+  }
+  // Een rol die de Super Admin intussen heeft gewijzigd geldt meteen.
+  if(ingelogdAdmin){ const vers = allAdmins.find(a=>a.id===ingelogdAdmin.id); if(vers) ingelogdAdmin = vers; }
+}
 async function laadAlles(){
+  await laadRollen();
   const [banen, lussen, combinaties, tees, spelers] = await Promise.all([
     sbG('banen','order=naam'),
     sbG('lussen','order=naam'),
     sbG('combinaties','order=naam'),
     sbG('tees','order=kleur'),
-    sbG('spelers','select=id,naam,email,exact_hcp,hcp_bevestigd,actief&order=naam')
+    sbG('spelers','select=id,naam,email,exact_hcp,hcp_bevestigd,actief'+(ROLLEN_AAN?',aangemaakt_door':'')+'&order=naam')
   ]);
   allBanen = banen||[]; allLussen = lussen||[]; allCombinaties = combinaties||[]; allTees = tees||[]; allSpelers = spelers||[];
   const [toernooien, rondes, deelnemers] = await Promise.all([
@@ -1295,14 +1507,18 @@ function periodiekeVersverCheck(){
   const detailActief = document.getElementById('panel-toernooi-detail')?.classList.contains('active');
   if(klsActief || detailActief) verwerkLiveUpdate();
 }
+// Hoe vaak een openstaande scorekaart zelf de stand van de flight opnieuw
+// ophaalt — zie scVerversOpenKaart verderop.
+const SC_VERVERS_INTERVAL_MS = 30000;
 if(typeof document!=='undefined' && document.addEventListener){
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible'){ verwerkLiveUpdate(); heropenRealtime(); }
+    if(document.visibilityState==='visible'){ verwerkLiveUpdate(); heropenRealtime(); scVerversOpenKaart(); }
   });
 }
 if(typeof window!=='undefined' && window.addEventListener){
-  window.addEventListener('online', ()=>{ verwerkLiveUpdate(); heropenRealtime(); });
+  window.addEventListener('online', ()=>{ verwerkLiveUpdate(); heropenRealtime(); scVerversOpenKaart(); });
   setInterval(periodiekeVersverCheck, 60000);
+  setInterval(()=>{ if(typeof document==='undefined' || document.visibilityState==='visible') scVerversOpenKaart(); }, SC_VERVERS_INTERVAL_MS);
 }
 // Houdt de modal-overlay (.mo, o.a. de scorekaart) gelijk aan de ZICHTBARE
 // viewport i.p.v. de layout-viewport, via de CSS-variabelen --vvh/--vvt.
@@ -1346,6 +1562,75 @@ if(typeof window!=='undefined' && window.visualViewport && window.visualViewport
 // maken) bevat afhankelijk van de Postgres-instellingen soms niet genoeg
 // gegevens (alleen het id) om gericht één cel te bepalen — dat is zeldzaam
 // genoeg om daarvoor gewoon een volledige herfetch + herrender te doen.
+// BIJHALEN VAN DE OPEN SCOREKAART (sinds v1.42.0)
+// De gedeelde scorekaart werd uitsluitend bijgewerkt door live meldingen
+// (verwerkScoreLogLiveUpdate hieronder). Een melding die het toestel mist —
+// scherm op slot tussen twee holes, even geen bereik, een websocket die op de
+// achtergrond is weggevallen — kwam daarna nooit meer binnen: de invoer van je
+// medespeler stond allang in de database, maar jouw kaart liet hem pas zien
+// (en toonde een score dus pas als bevestigd) nadat je de kaart sloot en weer
+// opende, want alleen dát haalde alles opnieuw op.
+// Daarom haalt de open kaart nu zelf de stand van de eigen flight opnieuw op:
+//  - zodra de app weer in beeld komt of de verbinding terugkeert;
+//  - elke SC_VERVERS_INTERVAL_MS zolang de kaart openstaat en in beeld is;
+//  - kort na elke eigen invoer (scPlanVervers), het moment waarop je kijkt.
+// Live meldingen blijven werken en zijn nog steeds de snelste weg; dit is het
+// vangnet eronder.
+let scVerversBezig = false, scVerversTimer = null;
+function scPlanVervers(ms){
+  if(scVerversTimer) clearTimeout(scVerversTimer);
+  scVerversTimer = setTimeout(()=>{ scVerversTimer = null; scVerversOpenKaart(); }, ms);
+}
+// Een eigen schrijfactie op de kaart loopt (scGridCommit/scGridBlur). Zolang
+// dat zo is, of als er tijdens het ophalen een is afgerond, wordt een opgehaalde
+// stand niet toegepast: die kan van vóór die schrijfactie zijn en zou de eigen
+// invoer dan even laten verdwijnen. Er volgt vanzelf een nieuwe poging.
+function scSchrijfStart(ctx){ ctx._schrijf = (ctx._schrijf||0)+1; }
+function scSchrijfKlaar(ctx){ ctx._schrijf = Math.max(0, (ctx._schrijf||0)-1); ctx._versie = (ctx._versie||0)+1; scPlanVervers(2500); }
+async function scVerversOpenKaart(){
+  const modalEl = document.getElementById('moScore');
+  const ctx = window._scCtx;
+  if(!modalEl || !modalEl.classList.contains('open') || !ctx || isAdmin() || ctx.readOnly || !ctx.kolomSpelers || !ingelogdSpeler) return;
+  if(!document.getElementById('scGrid') || scVerversBezig) return;
+  if((ctx._schrijf||0)>0){ scPlanVervers(1500); return; }
+  scVerversBezig = true;
+  const versie = ctx._versie||0;
+  try{
+    const ids = ctx.kolomSpelers.join(',');
+    const [log, scores] = await Promise.all([
+      sbG('score_holes_log','ronde_id=eq.'+ctx.rondeId+'&speler_id=in.('+ids+')'),
+      ctx.kolomSpelers.length>1 ? sbG('scores','ronde_id=eq.'+ctx.rondeId+'&speler_id=in.('+ids+')') : Promise.resolve(null)
+    ]);
+    if(window._scCtx!==ctx || !modalEl.classList.contains('open')) return;
+    if((ctx._versie||0)!==versie || (ctx._schrijf||0)>0){ scPlanVervers(1500); return; }
+    // Invoeren van de eigen flight vervangen door de opgehaalde stand (zo
+    // verdwijnt ook een invoer die een medespeler weer heeft gewist); rijen
+    // van andere flights blijven ongemoeid.
+    const inFlight = new Set(ctx.kolomSpelers);
+    ctx.log = (ctx.log||[]).filter(l=>!inFlight.has(l.speler_id)).concat(log||[]);
+    // Tee/handicap van medespelers (voor hun punten en subtotalen): de eigen
+    // rij blijft zoals dit toestel hem bijhoudt.
+    if(scores) ctx.kolomScores = (ctx.kolomScores||[]).filter(sc=>sc.speler_id===ctx.spelerId).concat(scores.filter(sc=>sc.speler_id!==ctx.spelerId));
+    scGridBijwerkenNaVerversen(ctx);
+  }catch(e){ /* geen bereik: de volgende poging haalt het in */ }
+  finally{ scVerversBezig = false; }
+}
+// Zet de opgehaalde stand op het scherm. Staat de cursor nergens in het
+// raster, dan wordt het in één keer opnieuw getekend (ook de subtotalen).
+// Wordt er net getypt of staat een keuzelijst open, dan alleen de losse
+// vakjes — en het vakje met de cursor blijft met rust.
+function scGridBijwerkenNaVerversen(ctx){
+  const grid = document.getElementById('scGrid');
+  if(!grid) return;
+  const actief = document.activeElement;
+  if(!actief || !grid.contains(actief)){ grid.innerHTML = scoreGridHtml(ctx); return; }
+  (ctx.kolomSpelers||[]).forEach((id,ci)=>{
+    for(let i=0;i<ctx.holes.length;i++){
+      const el = document.getElementById('scc_'+ci+'_'+i);
+      if(el && el!==actief) scGridHerrenderCel(id, i);
+    }
+  });
+}
 function verwerkScoreLogLiveUpdate(payload){
   const modalEl = document.getElementById('moScore');
   const ctx = window._scCtx;
@@ -1378,7 +1663,7 @@ function verwerkScoreLogLiveUpdate(payload){
 function renderHeader(){
   const r = document.getElementById('hdrR');
   if(isAdmin()){
-    r.innerHTML = `<span class="adm-badge" style="cursor:pointer" onclick="openAdminAccountModal()" title="Wachtwoord wijzigen">Admin: ${esc(ingelogdAdmin.naam)}</span><button class="adm-btn" onclick="logoutAdmin()">Uitloggen</button>`;
+    r.innerHTML = `<span class="adm-badge" style="cursor:pointer" onclick="openAdminAccountModal()" title="${rolLabel(ingelogdAdmin)}: ${esc(ingelogdAdmin.naam)} — wachtwoord wijzigen">${rolLabel(ingelogdAdmin)}: ${esc(ingelogdAdmin.naam)}</span><button class="adm-btn" style="flex-shrink:0" onclick="logoutAdmin()">Uitloggen</button>`;
   } else if(ingelogdSpeler){
     r.innerHTML = `<button class="adm-btn" onclick="logoutSpeler()">Uitloggen</button>`;
   } else {
@@ -1389,90 +1674,81 @@ function renderHeader(){
 /* =========================================================
    AUTH: SPELER LOGIN / REGISTRATIE
    ========================================================= */
-function renderLoginPanel(){
+// INLOGGEN (sinds v1.45.0)
+// Een speler typt zijn naam en pincode. Er staat bewust géén namenlijst meer
+// op het inlogscherm: wie de app opent ziet niet wie er meedoen. Hoofdletters
+// en extra spaties maken niet uit. Beheerders loggen in via de link
+// "Beheerder?" onder het formulier (beheernaam + wachtwoord).
+let loginModus = 'speler';
+function renderLoginPanel(modus){
   const el = document.getElementById('panel-login');
+  loginModus = modus || (localStorage.getItem('laatste_login')==='__admin__' ? 'admin' : 'speler');
+  const admin = loginModus==='admin';
+  // Met maar één beheeraccount blijft het zoals het was: alleen het wachtwoord.
+  const metBeheernaam = admin && allAdmins.length>1;
   el.innerHTML = `
-  <div class="sh"><div><div class="st">Welkom</div><div class="ss">Log in met je naam en pincode</div></div></div>
-  <div class="card"><div class="ch"><div class="ct">Inloggen</div></div>
+  <div class="sh"><div><div class="st">Welkom</div><div class="ss">${admin?(metBeheernaam?'Log in met je beheernaam en wachtwoord':'Log in met het beheerwachtwoord'):'Log in met je naam en pincode'}</div></div></div>
+  <div class="card"><div class="ch"><div class="ct">${admin?'Inloggen als beheerder':'Inloggen'}</div></div>
     <div class="cb">
       <form id="loginForm" onsubmit="event.preventDefault(); doSpelerLogin(); return false;">
-      <div class="fg af-wrap"><label>Naam</label><input type="text" class="af-spiegel" id="loginNaamAF" name="username" autocomplete="username" tabindex="-1" aria-hidden="true" oninput="syncLoginNaamVanAutofill()" onchange="syncLoginNaamVanAutofill()"><select id="loginNaam" onchange="checkLoginNaamKeuze()"></select></div>
-      <div class="fg"><label id="loginPinLabel">Pincode</label><input type="password" name="password" autocomplete="current-password" inputmode="numeric" maxlength="4" id="loginPin" placeholder="4 cijfers"></div>
+      ${admin
+        ? (metBeheernaam?`<div class="fg"><label>Beheernaam <span class="hint">de naam van je beheeraccount</span></label><input type="text" id="loginAdminNaam" name="username" autocomplete="username" autocapitalize="words" autocorrect="off" spellcheck="false"></div>`:'')+
+          `<div class="fg"><label id="loginPinLabel">Wachtwoord</label><input type="password" name="password" autocomplete="current-password" id="loginPin" placeholder="Wachtwoord"></div>`
+        : `<div class="fg"><label>Naam <span class="hint">voor- en achternaam</span></label><input type="text" id="loginNaam" name="username" autocomplete="username" autocapitalize="words" autocorrect="off" spellcheck="false"></div>
+      <div class="fg"><label id="loginPinLabel">Pincode</label><input type="password" name="password" autocomplete="current-password" inputmode="numeric" maxlength="4" id="loginPin" placeholder="4 cijfers"></div>`}
       <button type="submit" class="btn bp bf">Inloggen</button>
       </form>
     </div>
   </div>
-  <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;text-align:center;margin-top:4px">Sta je er nog niet bij? Vraag de organisatie om je toe te voegen.</p>`;
-  const sel = document.getElementById('loginNaam');
-  const zichtbareSpelers = allSpelers.filter(s=>s.actief!==false && speelbaarVoorLogin(s.id));
-  sel.innerHTML = '<option value="">— Kies —</option><option value="__admin__">Admin</option>' + zichtbareSpelers.map(s=>`<option value="${s.id}">${esc(s.naam)}</option>`).join('');
+  ${admin?'':`<p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;text-align:center;margin-top:4px">Hoofdletters maken niet uit. Lukt inloggen niet? Vraag de organisatie hoe je naam is ingevoerd.</p>`}
+  <button type="button" class="login-link" id="loginWissel" onclick="renderLoginPanel('${admin?'speler':'admin'}')">${admin?'← Inloggen als speler':'Beheerder? Log hier in'}</button>`;
   // Zet de naam waarmee op dit toestel het laatst is ingelogd alvast klaar.
-  // Dan hoeft het wachtwoordbeheer van de telefoon alleen nog de pincode in te
-  // vullen — ook als het de naam zelf niet (goed) kan invullen.
-  const laatste = localStorage.getItem('laatste_login');
-  if(laatste && Array.from(sel.options).some(o=>o.value===laatste)) sel.value = laatste;
-  checkLoginNaamKeuze(true);
-}
-// Admin staat als kortste weg bovenaan dezelfde "Kies"-lijst als de spelers.
-// Kies je Admin, dan verandert het Pincode-veld gewoon ter plekke in een
-// Wachtwoord-veld — geen apart inlogscherm nodig.
-// behoudWaarde=true: de naam is niet door de gebruiker zelf gekozen maar door
-// autofill / de app gezet. Dan het pincode-/wachtwoordveld NIET leegmaken —
-// de telefoon kan dat veld al hebben ingevuld, en leegmaken zou dat weer
-// ongedaan maken.
-function checkLoginNaamKeuze(behoudWaarde){
-  const sel = document.getElementById('loginNaam');
-  const isAdminKeuze = sel.value === '__admin__';
-  const label = document.getElementById('loginPinLabel');
-  const veld = document.getElementById('loginPin');
-  // Spiegelveld gelijk houden aan de gekozen naam, zodat het wachtwoordbeheer
-  // de pincode onder de juiste naam opslaat.
-  const af = document.getElementById('loginNaamAF');
-  if(af) af.value = sel.value ? sel.options[sel.selectedIndex].textContent.trim() : '';
-  if(label) label.textContent = isAdminKeuze ? 'Wachtwoord' : 'Pincode';
-  if(veld){
-    if(behoudWaarde !== true) veld.value = '';
-    veld.placeholder = isAdminKeuze ? 'Wachtwoord' : '4 cijfers';
-    veld.setAttribute('inputmode', isAdminKeuze ? 'text' : 'numeric');
-    if(isAdminKeuze) veld.removeAttribute('maxlength'); else veld.setAttribute('maxlength','4');
+  if(admin){
+    const naamVeld = document.getElementById('loginAdminNaam');
+    if(naamVeld) naamVeld.value = localStorage.getItem('laatste_admin_naam') || '';
+  } else {
+    document.getElementById('loginNaam').value = localStorage.getItem('laatste_login_naam') || '';
   }
 }
-// Autofill (Chrome / Samsung Pass) kan alleen het onzichtbare tekstveld
-// 'loginNaamAF' invullen, niet de keuzelijst zelf. Staat daar een naam in die
-// EXACT (hoofdletterongevoelig) bij precies één keuze hoort, kies die dan —
-// alsof de gebruiker hem zelf in de lijst had aangetikt.
-function syncLoginNaamVanAutofill(){
-  const af = document.getElementById('loginNaamAF');
-  const sel = document.getElementById('loginNaam');
-  if(!af || !sel) return false;
-  const getypt = af.value.trim().toLowerCase();
-  if(!getypt) return false;
-  const matches = Array.from(sel.options).filter(o => o.value && o.textContent.trim().toLowerCase() === getypt);
-  if(matches.length !== 1) return false;
-  if(sel.value !== matches[0].value){
-    sel.value = matches[0].value;
-    checkLoginNaamKeuze(true);
-  }
-  return true;
+// Zoekt de (actieve) speler bij een getypte naam. Eerst op de naam zelf
+// (hoofdletters en spaties maken niet uit); lukt dat niet, dan losser (ook
+// accenten, punten en streepjes tellen niet mee) — maar alleen als daar precies
+// één speler bij past. Geeft null bij geen of een dubbelzinnige treffer.
+function zoekSpelerVoorLogin(naam, lijst){
+  const sleutel = naamSleutel(naam);
+  if(!sleutel) return null;
+  const actief = (lijst||[]).filter(sp=>sp.actief!==false);
+  const exact = actief.filter(sp=>naamSleutel(sp.naam)===sleutel);
+  if(exact.length===1) return exact[0];
+  if(exact.length>1) return exact.find(sp=>String(sp.naam).trim()===String(naam).trim()) || null;
+  const los = actief.filter(sp=>naamLos(sp.naam)===naamLos(naam));
+  return los.length===1 ? los[0] : null;
 }
 async function doSpelerLogin(){
-  // Vangnet: Android/Samsung-autofill vuurt bij het in één keer invullen van
-  // meerdere velden niet altijd een input-event af. Lees het spiegelveld
-  // daarom hier nogmaals uit voordat we de gekozen naam gebruiken.
-  syncLoginNaamVanAutofill();
-  const id = document.getElementById('loginNaam').value;
   const waarde = document.getElementById('loginPin').value.trim();
-  if(id === '__admin__'){
+  if(loginModus==='admin'){
     if(!waarde){ toast('Vul je wachtwoord in', true); return; }
-    await doAdminLoginViaWachtwoordveld(waarde);
+    const naamVeld = document.getElementById('loginAdminNaam');
+    await doAdminLoginViaWachtwoordveld(waarde, naamVeld ? naamVeld.value : '');
     return;
   }
+  const naam = document.getElementById('loginNaam').value;
   const pin = waarde;
-  if(!id || !pin){ toast('Kies je naam en vul je pincode in', true); return; }
+  if(!naamSleutel(naam) || !pin){ toast('Vul je naam en pincode in', true); return; }
   try{
-    const rows = await sbG('spelers', 'id=eq.'+id+'&select=id,naam,email,exact_hcp,hcp_bevestigd,actief,pin_hash');
+    let kandidaat = zoekSpelerVoorLogin(naam, allSpelers);
+    if(!kandidaat){
+      // De lijst in het geheugen kan verouderd zijn (speler toegevoegd nadat
+      // dit scherm werd geopend): één keer vers ophalen.
+      const vers = await sbG('spelers','select=id,naam,actief').catch(()=>null);
+      if(vers) kandidaat = zoekSpelerVoorLogin(naam, vers);
+    }
+    // Eén en dezelfde melding, of nu de naam of de pincode niet klopt: zo valt
+    // niet af te tasten welke namen in Rondje! staan.
+    if(!kandidaat){ toast('Naam of pincode onjuist', true); return; }
+    const rows = await sbG('spelers', 'id=eq.'+kandidaat.id+'&select=id,naam,email,exact_hcp,hcp_bevestigd,actief,pin_hash');
     const rec = rows && rows[0];
-    if(!rec || !(await verifieerHash(pin, rec.pin_hash))){ toast('Naam of pincode onjuist', true); return; }
+    if(!rec || rec.actief===false || !(await verifieerHash(pin, rec.pin_hash))){ toast('Naam of pincode onjuist', true); return; }
     delete rec.pin_hash;
     // Je kunt niet tegelijk als speler én als admin ingelogd zijn — inloggen
     // als speler beëindigt automatisch een eventuele actieve adminsessie.
@@ -1482,6 +1758,7 @@ async function doSpelerLogin(){
     ingelogdSpeler = rec;
     localStorage.setItem('speler_id', rec.id);
     localStorage.setItem('laatste_login', rec.id);
+    localStorage.setItem('laatste_login_naam', rec.naam);
     toast(welAdminActief ? 'Welkom, '+rec.naam+'! (je bent uitgelogd als admin)' : 'Welkom, '+rec.naam+'!');
     await boot();
   }catch(e){ toast('Inloggen mislukt: '+e.message, true); }
@@ -1491,66 +1768,53 @@ function logoutSpeler(){
   localStorage.removeItem('speler_id');
   boot();
 }
-// Inloggen als admin via hetzelfde ene loginscherm (Naam="Admin" + het
-// veld dat dan "Wachtwoord" heet). Er is bewust geen apart naam-veld voor de
-// admin: we checken het wachtwoord gewoon tegen alle admin-accounts en loggen
-// in als degene die matcht — in de praktijk is er meestal toch maar één.
-async function doAdminLoginViaWachtwoordveld(pwd){
+// Inloggen als beheerder via hetzelfde loginscherm (link "Beheerder?").
+// - Eén beheeraccount: alleen het wachtwoord, zoals altijd.
+// - Meerdere accounts (sinds v1.44.0: Super Admin + Toernooi Admins): naam +
+//   wachtwoord, en alleen dát account wordt gecontroleerd. Bewust geen
+//   "probeer het wachtwoord op alle accounts": dan zou een Toernooi Admin die
+//   toevallig hetzelfde wachtwoord kiest als de Super Admin als Super Admin
+//   binnen kunnen komen.
+async function doAdminLoginViaWachtwoordveld(pwd, naam){
   try{
     const rows = await sbG('admins','select=id,naam,pwd_hash') || [];
     let match = null;
-    for(const rec of rows){
-      if(await verifieerHash(pwd, rec.pwd_hash)){ match = rec; break; }
+    if(rows.length>1){
+      const sleutel = naamSleutel(naam);
+      if(!sleutel){
+        // Het naamveld stond er nog niet (account toegevoegd nadat dit scherm
+        // werd geladen): alsnog tonen.
+        if(allAdmins.length<=1){
+          allAdmins = rows.map(r=>({id:r.id, naam:r.naam}));
+          renderLoginPanel('admin');
+          document.getElementById('loginPin').value = pwd;
+        }
+        toast('Vul ook je beheernaam in', true); return;
+      }
+      const rec = rows.find(r=>naamSleutel(r.naam)===sleutel);
+      if(rec && await verifieerHash(pwd, rec.pwd_hash)) match = rec;
+      if(!match){ toast('Beheernaam of wachtwoord onjuist', true); return; }
+    } else {
+      for(const rec of rows){
+        if(await verifieerHash(pwd, rec.pwd_hash)){ match = rec; break; }
+      }
+      if(!match){ toast('Wachtwoord onjuist', true); return; }
     }
-    if(!match){ toast('Wachtwoord onjuist', true); return; }
     // Je kunt niet tegelijk als speler én als admin ingelogd zijn — inloggen
     // als admin beëindigt automatisch een eventuele actieve spelerssessie.
     const welSpelerActief = !!ingelogdSpeler;
     ingelogdSpeler = null;
     localStorage.removeItem('speler_id');
-    ingelogdAdmin = {id: match.id, naam: match.naam};
+    ingelogdAdmin = allAdmins.find(x=>x.id===match.id) || {id: match.id, naam: match.naam};
     localStorage.setItem('admin_naam', match.naam);
+    localStorage.setItem('laatste_admin_naam', match.naam);
     localStorage.setItem('laatste_login', '__admin__');
-    toast(welSpelerActief ? 'Ingelogd als admin — je bent uitgelogd als speler' : 'Ingelogd als admin');
+    const als = ROLLEN_AAN ? rolLabel(ingelogdAdmin) : 'admin';
+    toast(welSpelerActief ? 'Ingelogd als '+als+' — je bent uitgelogd als speler' : 'Ingelogd als '+als);
     await boot();
   }catch(e){ toast('Inloggen mislukt: '+e.message, true); }
 }
 
-/* =========================================================
-   AUTH: ADMIN LOGIN (los scherm — niet meer gekoppeld vanuit de UI, maar
-   blijft bestaan als fallback / voor eventueel toekomstig gebruik)
-   ========================================================= */
-function openAdminLoginModal(){
-  openModalHtml('moAdminLogin', `
-    <h3>Admin inloggen</h3>
-    <form onsubmit="event.preventDefault(); doAdminLogin(); return false;">
-    <div class="fg"><label>Naam</label><input type="text" id="adminLoginNaam" name="username" autocomplete="username"></div>
-    <div class="fg"><label>Wachtwoord</label><input type="password" id="adminLoginPwd" name="password" autocomplete="current-password"></div>
-    <div class="brow"><button type="submit" class="btn bp bf">Inloggen</button><button type="button" class="btn bg bf" onclick="closeModal('moAdminLogin')">Annuleren</button></div>
-    </form>
-  `);
-}
-async function doAdminLogin(){
-  const naam = document.getElementById('adminLoginNaam').value.trim();
-  const pwd = document.getElementById('adminLoginPwd').value;
-  if(!naam||!pwd){ toast('Vul naam en wachtwoord in', true); return; }
-  try{
-    const rows = await sbG('admins','naam=eq.'+encodeURIComponent(naam)+'&select=id,naam,pwd_hash');
-    const rec = rows && rows[0];
-    if(!rec || !(await verifieerHash(pwd, rec.pwd_hash))){ toast('Naam of wachtwoord onjuist', true); return; }
-    delete rec.pwd_hash;
-    // Je kunt niet tegelijk als speler én als admin ingelogd zijn — inloggen
-    // als admin beëindigt automatisch een eventuele actieve spelerssessie.
-    const welSpelerActief = !!ingelogdSpeler;
-    ingelogdSpeler = null;
-    localStorage.removeItem('speler_id');
-    ingelogdAdmin = rec;
-    localStorage.setItem('admin_naam', rec.naam);
-    closeModal('moAdminLogin');
-    toast(welSpelerActief ? 'Ingelogd als admin — je bent uitgelogd als speler' : 'Ingelogd als admin');
-    await boot();
-  }catch(e){ toast('Inloggen mislukt: '+e.message, true); }
-}
 function logoutAdmin(){
   ingelogdAdmin = null;
   localStorage.removeItem('admin_naam');
@@ -1564,7 +1828,7 @@ async function voegAdminToe(naam, pwd){
 }
 function openAdminAccountModal(){
   openModalHtml('moAdminAccount', `
-    <h3>Admin account</h3>
+    <h3>${rolLabel(ingelogdAdmin)}</h3>
     <div class="fg"><label>Ingelogd als</label><input type="text" value="${esc(ingelogdAdmin.naam)}" disabled></div>
     <div class="fg"><label>Nieuw wachtwoord</label><input type="password" id="adAccPwd1" autocomplete="new-password" placeholder="min. 8 tekens, letter + cijfer"></div>
     <div class="fg"><label>Herhaal nieuw wachtwoord</label><input type="password" id="adAccPwd2" autocomplete="new-password" onkeydown="if(event.key==='Enter')wijzigAdminWachtwoord()"></div>
@@ -1641,6 +1905,12 @@ function renderBanenPanel(){
     const lussenBouwsteen = lussen.filter(l=>l.holes.length!==18);
     const combsMulti = combs.filter(c=>c.lus2_id);
     const open = baanOpenIds.has(baan.id);
+    // Super Admin: alles. Toernooi Admin: alleen zijn eigen banen bewerken;
+    // aan een baan van een ander kan hij wel een tee toevoegen.
+    const bewerkbaar = magBaanBewerken(baan);
+    const teeKnoppen = (t, combId)=> magTeeBewerken(t, baan) ? `
+            <a href="#" onclick="event.preventDefault();openTeeModal('${combId}','${t.id}')" style="margin-left:6px">✎</a>
+            <a href="#" onclick="event.preventDefault();verwijderTee('${t.id}')" style="margin-left:4px">×</a>` : '';
     return `
     <div class="card">
       <div class="ch" style="cursor:pointer${open?'':';border-bottom:none'}" onclick="toggleBaanCard('${baan.id}')">
@@ -1649,10 +1919,10 @@ function renderBanenPanel(){
       </div>
       ${!open?'':`
       <div class="cb">
-        <div class="brow" style="margin-bottom:14px">
+        ${bewerkbaar?`<div class="brow" style="margin-bottom:14px">
           <button class="btn bg bsm" onclick="openBaanModal('${baan.id}')">Bewerken</button>
           <button class="btn bd bsm" onclick="verwijderBaan('${baan.id}')">Verwijderen</button>
-        </div>
+        </div>`:`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">Deze baan is door een andere beheerder ingevoerd. Je kunt hem voor je toernooi gebruiken en er een tee aan toevoegen; holes en bestaande tees wijzigt de Super Admin.</p>`}
         ${lussenSolo.length? lussenSolo.map(l=>{
           const comb = combinatieVoorLus(l.id);
           const tees = comb ? allTees.filter(t=>t.combinatie_id===comb.id) : [];
@@ -1660,40 +1930,36 @@ function renderBanenPanel(){
             <div><div class="rd" style="font-size:.95rem">${esc(l.naam)}</div><div class="rm">18 holes · par ${l.holes.reduce((a,x)=>a+x.par,0)} · ${tees.length} tee(s)</div></div>
             <div class="brow">
               <button class="btn bp bsm" onclick="voegTeeToeAanLus('${baan.id}','${l.id}')">+ Tee</button>
-              <button class="btn bg bsm" onclick="openLusModal('${baan.id}','${l.id}')">Holes bewerken</button>
-              <button class="btn bd bsm" onclick="verwijderLus('${l.id}')">×</button>
+              ${bewerkbaar?`<button class="btn bg bsm" onclick="openLusModal('${baan.id}','${l.id}')">Holes bewerken</button>
+              <button class="btn bd bsm" onclick="verwijderLus('${l.id}')">×</button>`:''}
             </div>
           </div>
-          ${tees.length?`<div class="ra">${tees.map(t=>`<span class="sp sbdg">${esc(t.kleur)} · CR ${t.course_rating} / Slope ${t.slope_rating}
-            <a href="#" onclick="event.preventDefault();openTeeModal('${comb.id}','${t.id}')" style="margin-left:6px">✎</a>
-            <a href="#" onclick="event.preventDefault();verwijderTee('${t.id}')" style="margin-left:4px">×</a></span>`).join('')}</div>`:''}
+          ${tees.length?`<div class="ra">${tees.map(t=>`<span class="sp sbdg">${esc(t.kleur)} · CR ${t.course_rating} / Slope ${t.slope_rating}${teeKnoppen(t, comb.id)}</span>`).join('')}</div>`:''}
           </div>`;
         }).join('') : ''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <b style="font-family:'Inter',sans-serif;font-size:.8rem;color:var(--tm)">Lussen (9-holes bouwstenen)</b>
-          <button class="btn bg bsm" onclick="openLusModal('${baan.id}')">+ Lus</button>
+          ${bewerkbaar?`<button class="btn bg bsm" onclick="openLusModal('${baan.id}')">+ Lus</button>`:''}
         </div>
         ${lussenBouwsteen.length? lussenBouwsteen.map(l=>`
           <div class="rc"><div class="rch">
             <div><div class="rd" style="font-size:.95rem">${esc(l.naam)}</div><div class="rm">${l.holes.length} holes · par ${l.holes.reduce((a,x)=>a+x.par,0)}</div></div>
-            <div class="brow">
+            ${bewerkbaar?`<div class="brow">
               <button class="btn bg bsm" onclick="openLusModal('${baan.id}','${l.id}')">Bewerken</button><button class="btn bd bsm" onclick="verwijderLus('${l.id}')">×</button>
-            </div>
+            </div>`:''}
           </div></div>`).join('') : '<div class="empty">Nog geen losse 9-holes lussen — gebruik "+ Lus" hierboven alleen als je baan uit losse negens bestaat die je moet combineren.</div>'}
         ${(lussenBouwsteen.length || combsMulti.length) ? `
         <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px">
           <b style="font-family:'Inter',sans-serif;font-size:.8rem;color:var(--tm)">Combinaties van meerdere 9-holes lussen</b>
-          <button class="btn bg bsm" onclick="openCombinatieModal('${baan.id}')" ${lussenBouwsteen.length?'':'disabled'}>+ Combinatie</button>
+          ${bewerkbaar?`<button class="btn bg bsm" onclick="openCombinatieModal('${baan.id}')" ${lussenBouwsteen.length?'':'disabled'}>+ Combinatie</button>`:''}
         </div>
         ${combsMulti.length? combsMulti.map(c=>{
           const tees = allTees.filter(t=>t.combinatie_id===c.id);
           return `<div class="rc"><div class="rch">
             <div><div class="rd" style="font-size:.95rem">${esc(c.naam)}</div><div class="rm">Par ${combinatieParTotaal(c)} · ${tees.length} tee(s)</div></div>
-            <div class="brow"><button class="btn bg bsm" onclick="openTeeModal('${c.id}')">+ Tee</button><button class="btn bd bsm" onclick="verwijderCombinatie('${c.id}')">×</button></div>
+            <div class="brow"><button class="btn bg bsm" onclick="openTeeModal('${c.id}')">+ Tee</button>${bewerkbaar?`<button class="btn bd bsm" onclick="verwijderCombinatie('${c.id}')">×</button>`:''}</div>
           </div>
-          ${tees.length?`<div class="ra">${tees.map(t=>`<span class="sp sbdg">${esc(t.kleur)} · CR ${t.course_rating} / Slope ${t.slope_rating}
-            <a href="#" onclick="event.preventDefault();openTeeModal('${c.id}','${t.id}')" style="margin-left:6px">✎</a>
-            <a href="#" onclick="event.preventDefault();verwijderTee('${t.id}')" style="margin-left:4px">×</a></span>`).join('')}</div>`:''}
+          ${tees.length?`<div class="ra">${tees.map(t=>`<span class="sp sbdg">${esc(t.kleur)} · CR ${t.course_rating} / Slope ${t.slope_rating}${teeKnoppen(t, c.id)}</span>`).join('')}</div>`:''}
           </div>`;
         }).join('') : '<div class="empty">Nog geen combinaties.</div>'}` : ''}
       </div>`}
@@ -1714,14 +1980,16 @@ async function saveBaan(id){
   const naam = document.getElementById('baanNaam').value.trim();
   const locatie = document.getElementById('baanLocatie').value.trim();
   if(!naam){ toast('Vul een naam in', true); return; }
+  if(id && !magBaanBewerken(baanById(id))){ geenRechten(); return; }
   try{
     if(id) await sbPa('banen', id, {naam, locatie:locatie||null});
-    else await sbP('banen', {naam, locatie:locatie||null});
+    else await sbP('banen', metMaker({naam, locatie:locatie||null}));
     closeModal('moBaan'); toast('Baan opgeslagen');
     await laadAlles(); renderBanenPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
 async function verwijderBaan(id){
+  if(!magBaanBewerken(baanById(id))){ geenRechten(); return; }
   if(!confirm('Deze baan (met alle lussen, combinaties en tees) verwijderen?')) return;
   try{ await sbD('banen', id); toast('Baan verwijderd'); await laadAlles(); renderBanenPanel(); }
   catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
@@ -1784,6 +2052,7 @@ function vulHolesVanuitTekst(){
   toast('Holes ingevuld — controleer de velden en sla op');
 }
 async function saveLus(baanId, id){
+  if(!magBaanBewerken(baanById(baanId))){ geenRechten(); return; }
   const naam = document.getElementById('lusNaam').value.trim();
   if(!naam){ toast('Vul een naam in', true); return; }
   const n = id ? lusById(id).holes.length : parseInt(document.getElementById('lusAantal').value);
@@ -1802,6 +2071,7 @@ async function saveLus(baanId, id){
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
 async function verwijderLus(id){
+  if(!magBaanBewerken(baanById((lusById(id)||{}).baan_id))){ geenRechten(); return; }
   if(!confirm('Deze lus verwijderen? Combinaties die deze lus gebruiken worden ook onbruikbaar.')) return;
   try{ await sbD('lussen', id); toast('Lus verwijderd'); await laadAlles(); renderBanenPanel(); }
   catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
@@ -1840,6 +2110,7 @@ function openCombinatieModal(baanId, combId){
   `);
 }
 async function saveCombinatie(baanId, id){
+  if(!magBaanBewerken(baanById(baanId))){ geenRechten(); return; }
   const naam = document.getElementById('combNaam').value.trim();
   const lus1_id = document.getElementById('combLus1').value || null;
   const lus2_id = document.getElementById('combLus2').value || null;
@@ -1855,6 +2126,7 @@ async function saveCombinatie(baanId, id){
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
 async function verwijderCombinatie(id){
+  if(!magBaanBewerken(baanById((combinatieById(id)||{}).baan_id))){ geenRechten(); return; }
   if(!confirm('Deze combinatie (met alle tees) verwijderen?')) return;
   try{ await sbD('combinaties', id); toast('Combinatie verwijderd'); await laadAlles(); renderBanenPanel(); }
   catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
@@ -1882,14 +2154,19 @@ async function saveTee(combId, id){
   const slope = parseInt(document.getElementById('teeSlope').value);
   const par = parseInt(document.getElementById('teePar').value);
   if(!kleur||isNaN(cr)||isNaN(slope)||isNaN(par)){ toast('Vul alle velden correct in', true); return; }
+  // Een nieuwe tee mag elke beheerder toevoegen (ook aan een baan van een
+  // ander); een bestaande tee wijzigen alleen wie hem of de baan heeft ingevoerd.
+  if(id && !magTeeBewerken(teeById(id), baanById((combinatieById(combId)||{}).baan_id))){ geenRechten(); return; }
   try{
     if(id) await sbPa('tees', id, {kleur, course_rating:cr, slope_rating:slope, par});
-    else await sbP('tees', {combinatie_id:combId, kleur, course_rating:cr, slope_rating:slope, par});
+    else await sbP('tees', metMaker({combinatie_id:combId, kleur, course_rating:cr, slope_rating:slope, par}));
     closeModal('moTee'); toast('Tee opgeslagen');
     await laadAlles(); renderBanenPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
 async function verwijderTee(id){
+  { const tee = teeById(id); const comb = tee ? combinatieById(tee.combinatie_id) : null;
+    if(!magTeeBewerken(tee, baanById((comb||{}).baan_id))){ geenRechten(); return; } }
   if(!confirm('Deze tee verwijderen?')) return;
   try{ await sbD('tees', id); toast('Tee verwijderd'); await laadAlles(); renderBanenPanel(); }
   catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
@@ -2026,8 +2303,14 @@ function renderBeheerToernooienPanel(){
   </div>
   <div id="beheerToernooienLijst"></div>`;
   const lijst = document.getElementById('beheerToernooienLijst');
-  if(!allToernooien.length){ lijst.innerHTML='<div class="empty">Nog geen toernooien.</div>'; return; }
-  lijst.innerHTML = allToernooien.map(t=>{
+  const teBeheren = beheerToernooien();
+  if(!teBeheren.length){
+    lijst.innerHTML = isToernooiAdmin()
+      ? '<div class="empty">Je beheert nog geen toernooien. Maak er een aan met "+ Toernooi", of vraag de Super Admin om een toernooi aan je toe te wijzen.</div>'
+      : '<div class="empty">Nog geen toernooien.</div>';
+    return;
+  }
+  lijst.innerHTML = teBeheren.map(t=>{
     const rondes = allRondes.filter(r=>r.toernooi_id===t.id).sort((a,b)=>a.volgorde-b.volgorde);
     const deeln = allDeelnemers.filter(d=>d.toernooi_id===t.id);
     const teams = teamsVoorToernooi(t.id);
@@ -2045,7 +2328,7 @@ function renderBeheerToernooienPanel(){
       <div class="cb">
         <div class="brow" style="margin-bottom:14px">
           <button class="btn bg bsm" onclick="openToernooiModal('${t.id}')">Bewerken</button>
-          <button class="btn bd bsm" onclick="verwijderToernooi('${t.id}')">Verwijderen</button>
+          ${magToernooiVerwijderen(t)?`<button class="btn bd bsm" onclick="verwijderToernooi('${t.id}')">Verwijderen</button>`:''}
         </div>
         ${t.beschrijving?`<div class="rm" style="margin-bottom:10px">${esc(t.beschrijving)}</div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -2082,9 +2365,58 @@ function renderBeheerToernooienPanel(){
           <button class="btn bg bsm" onclick="openTeamsModal('${t.id}')">Teams beheren</button>
         </div>
         ${teams.length? `<div class="ra" style="flex-wrap:wrap">${teams.map(tm=>`<span class="sp sg"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${tm.kleur};margin-right:5px;vertical-align:middle"></span>${esc(tm.naam)}</span>`).join('')}</div>` : '<div class="empty">Nog geen teams aangemaakt.</div>'}
+        ${toernooiBeheerdersHtml(t)}
       </div>`}
     </div>`;
   }).join('');
+}
+// Per toernooi (alleen voor de Super Admin): welke Toernooi Admins het mogen
+// beheren, met toewijzen en weer intrekken.
+function toernooiBeheerdersHtml(t){
+  if(!isSuperAdmin() || !ROLLEN_AAN) return '';
+  const rijen = allToernooiAdmins.filter(x=>x.toernooi_id===t.id);
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px">
+          <b style="font-family:'Inter',sans-serif;font-size:.8rem;color:var(--tm)">Toernooi Admins</b>
+          <button class="btn bg bsm" onclick="openToernooiBeheerderModal('${t.id}')">+ Toernooi Admin</button>
+        </div>
+        ${rijen.length ? `<div class="ra" style="flex-wrap:wrap">${rijen.map(x=>{
+          const a = allAdmins.find(y=>y.id===x.admin_id);
+          return `<span class="sp s-ta">${esc(a?a.naam:'?')} <a href="#" onclick="event.preventDefault();ontkoppelToernooiAdmin('${x.id}')" style="margin-left:6px" title="Toewijzing intrekken">×</a></span>`;
+        }).join('')}</div>` : '<div class="empty">Alleen de Super Admin beheert dit toernooi.</div>'}`;
+}
+function openToernooiBeheerderModal(toernooiId){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const al = new Set(allToernooiAdmins.filter(x=>x.toernooi_id===toernooiId).map(x=>x.admin_id));
+  const kandidaten = allAdmins.filter(a=>adminRol(a)==='toernooi' && !al.has(a.id));
+  const t = toernooiById(toernooiId);
+  openModalHtml('moToernooiBeheerder', `
+    <h3>Toernooi Admin toewijzen</h3>
+    <p style="font-size:.8rem;color:var(--tl);margin-bottom:12px;font-family:'Inter',sans-serif">${esc(t?t.naam:'')}</p>
+    ${kandidaten.length ? `
+    <div class="fg"><label>Toernooi Admin</label><select id="tbAdmin">${kandidaten.map(a=>`<option value="${a.id}">${esc(a.naam)}</option>`).join('')}</select></div>
+    <p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">Hij kan dit toernooi daarna bewerken: rondes, deelnemers, startlijsten, teams en scores. Verwijderen kan alleen jij.</p>
+    <div class="brow"><button class="btn bp bf" onclick="wijsToernooiToe('${toernooiId}')">Toewijzen</button><button class="btn bg bf" onclick="closeModal('moToernooiBeheerder')">Annuleren</button></div>`
+    : `<p style="font-size:.85rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">${allAdmins.some(a=>adminRol(a)==='toernooi') ? 'Alle Toernooi Admins beheren dit toernooi al.' : 'Er zijn nog geen Toernooi Admins. Maak er eerst een aan bij Spelers → Beheerders.'}</p>
+    <button class="btn bg bf" onclick="closeModal('moToernooiBeheerder')">Sluiten</button>`}
+  `);
+}
+async function wijsToernooiToe(toernooiId){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const admin_id = document.getElementById('tbAdmin').value;
+  if(!admin_id) return;
+  try{
+    await sbP('toernooi_admins', {toernooi_id:toernooiId, admin_id});
+    closeModal('moToernooiBeheerder'); toast('Toernooi toegewezen');
+    await laadAlles(); renderBeheerToernooienPanel();
+  }catch(e){ toast('Toewijzen mislukt: '+e.message, true); }
+}
+async function ontkoppelToernooiAdmin(id){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const rij = allToernooiAdmins.find(x=>x.id===id);
+  const a = rij ? allAdmins.find(y=>y.id===rij.admin_id) : null;
+  if(!confirm('Toewijzing intrekken? '+(a?a.naam:'Deze Toernooi Admin')+' kan dit toernooi dan niet meer beheren. Het toernooi zelf blijft zoals het is.')) return;
+  try{ await sbD('toernooi_admins', id); toast('Toewijzing ingetrokken'); await laadAlles(); renderBeheerToernooienPanel(); }
+  catch(e){ toast('Mislukt: '+e.message, true); }
 }
 
 /* =========================================================
@@ -2486,14 +2818,20 @@ async function saveToernooi(id){
   const status = document.getElementById('tnStatus').value;
   const logo_data = window._tnLogoData || null;
   if(!naam || isNaN(allowance_pct)){ toast('Vul naam en allowance in', true); return; }
+  if(id && !magToernooiBeheren(id)){ geenRechten(); return; }
   try{
     if(id) await sbPa('toernooien', id, {naam, beschrijving:beschrijving||null, allowance_pct, status, logo_data});
-    else await sbP('toernooien', {naam, beschrijving:beschrijving||null, allowance_pct, status, logo_data});
+    else {
+      const nieuw = await sbP('toernooien', metMaker({naam, beschrijving:beschrijving||null, allowance_pct, status, logo_data}));
+      // Een Toernooi Admin beheert het toernooi dat hij zelf aanmaakt meteen.
+      if(isToernooiAdmin() && nieuw && nieuw[0]) await sbP('toernooi_admins', {toernooi_id: nieuw[0].id, admin_id: ingelogdAdmin.id});
+    }
     closeModal('moToernooi'); toast('Toernooi opgeslagen');
     await laadAlles(); renderBeheerToernooienPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
 async function verwijderToernooi(id){
+  if(!magToernooiVerwijderen(toernooiById(id))){ geenRechten(); return; }
   if(!confirm('Dit toernooi (met alle rondes, deelnemers en scores) verwijderen?')) return;
   try{ await sbD('toernooien', id); toast('Toernooi verwijderd'); await laadAlles(); renderBeheerToernooienPanel(); }
   catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
@@ -2779,21 +3117,163 @@ async function heropenRonde(id){
   catch(e){ toast('Mislukt: '+e.message, true); }
 }
 
-function openDeelnemerModal(toernooiId){
-  const al = new Set(allDeelnemers.filter(d=>d.toernooi_id===toernooiId).map(d=>d.speler_id));
-  const beschikbaar = allSpelers.filter(s=>!al.has(s.id) && s.actief!==false);
-  openModalHtml('moDeelnemer', `
-    <h3>Deelnemer uitnodigen</h3>
-    ${beschikbaar.length?`
-    <div class="fg"><label>Speler</label><select id="dnSpeler">${beschikbaar.map(s=>`<option value="${s.id}">${esc(s.naam)}</option>`).join('')}</select></div>
-    <div class="brow"><button class="btn bp bf" onclick="voegDeelnemerToe('${toernooiId}')">Uitnodigen</button><button class="btn bg bf" onclick="closeModal('moDeelnemer')">Annuleren</button></div>
-    ` : `<p style="font-size:.85rem;color:var(--tl);font-family:'Inter',sans-serif">Alle bekende spelers zijn al uitgenodigd. Nieuwe spelers kun je toevoegen via het tabblad Spelers.</p>
-    <button class="btn bg bf" onclick="closeModal('moDeelnemer')">Sluiten</button>`}
-  `);
+// SPELERS KOPPELEN OP E-MAIL OF NAAM (v1.44.0, e-mail sinds v1.45.0)
+// Een speler toevoegen gaat in deze volgorde:
+// 1. E-mailadres ingevuld en al bekend in Rondje! -> de app noemt de naam die
+//    erbij hoort en vraagt of die speler aan het toernooi moet worden gekoppeld.
+//    De match is altijd op het VOLLEDIGE adres: een Toernooi Admin kan zo niet
+//    door de spelerslijst bladeren.
+// 2. Anders op naam: bestaat de naam al — ook als dat van een toernooi is waar
+//    een Toernooi Admin niet bij kan — dan vraagt de app of het dezelfde
+//    persoon is en koppelt hem; verder wordt er niets van die speler getoond.
+// 3. Bestaat hij nog niet, dan wordt de speler aangemaakt.
+// Geeft terug wat er gebeurd is, of null als er niets is gedaan.
+async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
+  opties = opties || {};
+  const naam = String(naamRuw==null?'':naamRuw).trim().replace(/\s+/g,' ');
+  const email = String(opties.email==null?'':opties.email).trim();
+  if(!naam && !email){ toast('Vul een e-mailadres of een naam in', true); return null; }
+  if(email && !emailGeldig(email)){ toast('Dat e-mailadres klopt niet', true); return null; }
+  if(toernooiId && !magToernooiBeheren(toernooiId)){ geenRechten(); return null; }
+  const doetAlMee = sp => allDeelnemers.some(d=>d.toernooi_id===toernooiId && d.speler_id===sp.id);
+  const koppel = async (sp, via) => {
+    const rijen = await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id:sp.id, status:'uitgenodigd'});
+    if(rijen && rijen[0]) allDeelnemers.push(rijen[0]);
+    return {soort:'gekoppeld', speler:sp, via};
+  };
+  // --- 1. op e-mailadres
+  if(email){
+    const metAdres = spelersMetEmail(email);
+    let treffer = metAdres.find(sp=>naam && naamSleutel(sp.naam)===naamSleutel(naam)) || (metAdres.length===1 ? metAdres[0] : null);
+    if(!treffer && metAdres.length>1){
+      toast(naam ? 'Dit e-mailadres hoort bij meer dan één speler, maar niet bij deze naam — controleer de naam' : 'Dit e-mailadres hoort bij meer dan één speler — vul ook de naam in', true);
+      return null;
+    }
+    if(treffer){
+      const zelfdeNaam = !naam || naamSleutel(treffer.naam)===naamSleutel(naam);
+      if(!toernooiId){ toast('Dit e-mailadres staat al in Rondje!. Kies een toernooi om deze speler aan te koppelen.', true); return null; }
+      if(doetAlMee(treffer)){
+        if(zelfdeNaam){ toast(treffer.naam+' doet al mee aan dit toernooi', true); return null; }
+        if(!confirm('Dit e-mailadres hoort bij "'+treffer.naam+'", en die doet al mee aan dit toernooi.\n\nWil je "'+naam+'" als aparte speler met hetzelfde e-mailadres toevoegen?')) return null;
+      } else {
+        const alBekend = beheerSpelers().some(sp=>sp.id===treffer.id);
+        // Alleen zonder vraag als de beheerder de speler al kent én zelf de
+        // juiste naam erbij heeft getypt; bij alleen een adres altijd vragen.
+        if(naam && zelfdeNaam && alBekend) return await koppel(treffer, 'email');
+        if(confirm('Dit e-mailadres hoort bij "'+treffer.naam+'"'+(alBekend?'':', die al in Rondje! staat — bijvoorbeeld van een eerder toernooi')+'.\n\nKies OK om '+treffer.naam+' aan het toernooi toe te voegen. Zijn handicap en pincode blijven zoals ze zijn.')) return await koppel(treffer, 'email');
+        if(zelfdeNaam) return null;
+        if(!confirm('Wil je "'+naam+'" dan als aparte speler met hetzelfde e-mailadres toevoegen?')) return null;
+      }
+    } else if(!naam){
+      toast('Dit e-mailadres is nog niet bekend — vul ook de naam in', true); return null;
+    }
+  }
+  // --- 2. op naam
+  const bestaand = allSpelers.find(sp=>naamSleutel(sp.naam)===naamSleutel(naam));
+  if(bestaand){
+    if(!toernooiId){ toast('Deze naam staat al in Rondje!. Kies een toernooi om deze speler aan te koppelen.', true); return null; }
+    if(doetAlMee(bestaand)){ toast(bestaand.naam+' doet al mee aan dit toernooi', true); return null; }
+    const alBekend = beheerSpelers().some(sp=>sp.id===bestaand.id);
+    if(!alBekend && !confirm('Er staat al een speler met de naam "'+bestaand.naam+'" in Rondje! — bijvoorbeeld van een eerder toernooi.\n\nIs dit dezelfde persoon? Kies OK om hem aan je toernooi te koppelen. Zijn handicap en pincode blijven zoals ze zijn.\n\nIs het iemand anders, kies dan Annuleren en voer de naam iets anders in (bijvoorbeeld met een tweede voornaam of initiaal).')) return null;
+    const uit = await koppel(bestaand, 'naam');
+    // Had deze speler nog geen e-mailadres, dan wordt het ingevulde adres
+    // bewaard (nooit een bestaand adres overschrijven): de volgende keer is
+    // hij daarmee te vinden.
+    if(email && !bestaand.email){
+      try{ await sbPa('spelers', bestaand.id, {email}); bestaand.email = email; uit.emailBewaard = true; }catch(e){ /* niet erg: koppelen is gelukt */ }
+    }
+    return uit;
+  }
+  // --- 3. nieuwe speler
+  const pin = opties.pin || genereerRandomPin();
+  const velden = {naam, pin_hash: await maakHash(pin)};
+  if(email) velden.email = email;
+  if(opties.hcp!=null && !isNaN(opties.hcp)){ velden.exact_hcp = opties.hcp; velden.hcp_bevestigd = true; }
+  const rijen = await sbP('spelers', metMaker(velden));
+  const speler = rijen[0];
+  allSpelers.push(speler);
+  if(toernooiId){
+    const d = await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id:speler.id, status:'uitgenodigd'});
+    if(d && d[0]) allDeelnemers.push(d[0]);
+  }
+  return {soort:'nieuw', speler, pin, pinZelfGekozen: !!opties.pin};
 }
-async function voegDeelnemerToe(toernooiId){
-  const speler_id = document.getElementById('dnSpeler').value;
-  if(!speler_id) return;
+// Laat na het aanmaken van een speler zijn (willekeurige) pincode zien.
+function toonNieuwePincode(naam, pin){
+  openModalHtml('moNieuwePincodes', `<h3>Nieuwe speler</h3>
+    <p style="font-size:.82rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Geef deze pincode door aan de speler. Hij logt in met zijn naam zoals die hieronder staat (hoofdletters maken niet uit) en kan de pincode daarna zelf wijzigen via Profiel.</p>
+    <div class="tw"><table><thead><tr><th>Naam</th><th>Pincode</th></tr></thead><tbody>
+    <tr><td>${esc(naam)}</td><td><b>${esc(pin)}</b></td></tr>
+    </tbody></table></div>
+    <button class="btn bp bf" style="margin-top:12px" onclick="closeModal('moNieuwePincodes')">Sluiten</button>`);
+}
+// DEELNEMER TOEVOEGEN (sinds v1.45.0 één venster voor beide rollen)
+// Bovenaan e-mailadres en naam; daaronder de bestaande spelers die erbij
+// passen, aan te tikken om ze toe te voegen.
+// - Super Admin: de lijst loopt over ALLE spelers en vult aan op naam én
+//   e-mailadres, vanaf de eerste letter.
+// - Toernooi Admin: de lijst bevat alleen de spelers van zijn eigen toernooien
+//   (op naam). Iemand van buiten vindt hij alleen door het volledige adres of
+//   de volledige naam in te vullen en op Toevoegen te tikken — dan vraagt de
+//   app om bevestiging (zie koppelOfMaakSpeler).
+function deelnemerKandidaten(toernooiId){
+  const al = new Set(allDeelnemers.filter(d=>d.toernooi_id===toernooiId).map(d=>d.speler_id));
+  return beheerSpelers().filter(sp=>!al.has(sp.id) && sp.actief!==false);
+}
+function openDeelnemerModal(toernooiId){
+  if(!magToernooiBeheren(toernooiId)){ geenRechten(); return; }
+  const sup = isSuperAdmin();
+  openModalHtml('moDeelnemer', `
+    <h3>Deelnemer toevoegen</h3>
+    <div class="fg"><label>E-mailadres <span class="hint">${sup?'begin te typen':'volledig adres — aanbevolen'}</span></label><input type="email" id="dnEmail" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" oninput="tekenDeelnemerLijst('${toernooiId}')"></div>
+    <div class="fg"><label>Naam <span class="hint">voor- en achternaam</span></label><input type="text" id="dnNaam" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" oninput="tekenDeelnemerLijst('${toernooiId}')"></div>
+    <div id="dnLijstWrap"></div>
+    <div class="fg"><label>Exacte handicap <span class="hint">optioneel, alleen voor een nieuwe speler</span></label><input type="number" step="0.1" id="dnHcp"></div>
+    <div class="brow"><button class="btn bp bf" onclick="voegSpelerOpNaamToeAanToernooi('${toernooiId}')">Toevoegen</button><button class="btn bg bf" onclick="closeModal('moDeelnemer')">Sluiten</button></div>
+    <p style="font-size:.74rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:10px">${sup
+      ? 'Tik een speler in de lijst aan om hem toe te voegen. Staat hij er niet bij, vul dan e-mailadres en naam in en kies Toevoegen: hij wordt nieuw aangemaakt en je krijgt zijn pincode te zien.'
+      : 'Vul het e-mailadres in als je het hebt. Staat deze speler al in Rondje! (bijvoorbeeld van een eerder toernooi), dan vraagt de app of je hem wilt koppelen. Anders wordt hij nieuw aangemaakt en krijg je zijn pincode te zien.'}</p>
+  `);
+  tekenDeelnemerLijst(toernooiId);
+}
+function tekenDeelnemerLijst(toernooiId){
+  const wrap = document.getElementById('dnLijstWrap');
+  if(!wrap) return;
+  const sup = isSuperAdmin();
+  const emailQ = emailSleutel(document.getElementById('dnEmail').value);
+  const naamQ = naamSleutel(document.getElementById('dnNaam').value);
+  // Elk getypt woord moet in de naam voorkomen; bij de Super Admin telt ook
+  // het e-mailadres mee. Het e-mailveld zoekt bij de Toernooi Admin niet mee:
+  // die krijgt adressen van gedeelde spelers niet te zien, ook niet indirect.
+  const termen = ((sup?emailQ+' ':'')+naamQ).split(' ').filter(Boolean);
+  const alle = deelnemerKandidaten(toernooiId);
+  const lijst = alle.filter(sp=>{
+    const hooi = naamSleutel(sp.naam)+(sup && sp.email ? ' '+emailSleutel(sp.email) : '');
+    return termen.every(t=>hooi.includes(t));
+  });
+  if(!alle.length){ wrap.innerHTML = ''; return; }
+  const kop = termen.length ? 'Bestaande spelers die erbij passen' : (sup ? 'Bestaande spelers' : 'Spelers uit je eigen toernooien');
+  wrap.innerHTML = `<div class="fg" style="margin-bottom:5px"><label>${kop} <span class="hint">tik om toe te voegen</span></label></div>
+    <div class="dn-lijst" id="dnLijst">${lijst.length
+      ? lijst.map(sp=>`<button type="button" class="dn-item" data-id="${sp.id}" onclick="voegDeelnemerToeId('${toernooiId}','${sp.id}')"><span class="dn-n">${esc(sp.naam)}${sup && sp.email?`<span class="dn-e">${esc(sp.email)}</span>`:''}</span><span class="dn-plus">+ toevoegen</span></button>`).join('')
+      : `<div class="dn-leeg">${sup?'Geen bestaande speler gevonden — vul e-mailadres en naam in en kies Toevoegen.':'Niemand uit je eigen toernooien — kies Toevoegen om verder te zoeken.'}</div>`}</div>`;
+}
+async function voegSpelerOpNaamToeAanToernooi(toernooiId){
+  const naam = document.getElementById('dnNaam').value;
+  const emailVeld = document.getElementById('dnEmail');
+  const hcpRuw = document.getElementById('dnHcp').value;
+  try{
+    const uit = await koppelOfMaakSpeler(toernooiId, naam, {hcp: hcpRuw==='' ? null : parseFloat(hcpRuw), email: emailVeld ? emailVeld.value : ''});
+    if(!uit) return;
+    closeModal('moDeelnemer');
+    await laadAlles(); renderBeheerToernooienPanel();
+    if(uit.soort==='gekoppeld') toast(uit.speler.naam+' is aan '+(isToernooiAdmin()?'je':'het')+' toernooi gekoppeld');
+    else { toast(uit.speler.naam+' is toegevoegd'); toonNieuwePincode(uit.speler.naam, uit.pin); }
+  }catch(e){ toast('Toevoegen mislukt: '+e.message, true); }
+}
+async function voegDeelnemerToeId(toernooiId, speler_id){
+  if(!speler_id){ toast('Kies eerst een speler', true); return; }
+  if(!magToernooiBeheren(toernooiId) || (isToernooiAdmin() && !beheerSpelers().some(sp=>sp.id===speler_id))){ geenRechten(); return; }
   try{
     await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id, status:'uitgenodigd'});
     closeModal('moDeelnemer'); toast('Deelnemer uitgenodigd');
@@ -3337,6 +3817,20 @@ async function importeerStartlijst(){
   const blocks = raw.split(/\n\s*\n/).map(b=>b.split('\n').map(l=>l.trim()).filter(Boolean)).filter(b=>b.length>1);
   if(!blocks.length){ toast('Kon geen flights herkennen — eerste regel is de tijd, daarna namen', true); return; }
 
+  // Toernooi Admin: namen die al in Rondje! staan maar die hij nog niet kent,
+  // worden aan zijn toernooi gekoppeld. Vraag dat eerst na — het kan ook een
+  // naamgenoot zijn (zie koppelOfMaakSpeler voor dezelfde vraag per speler).
+  if(isToernooiAdmin()){
+    const bekend = new Set(beheerSpelers().map(sp=>sp.id));
+    const teKoppelen = [];
+    blocks.forEach(b=>b.slice(1).forEach(regel=>{
+      const {naam} = parseNaamRegel(regel);
+      const sp = naam ? allSpelers.find(x=>x.naam.toLowerCase()===naam.toLowerCase()) : null;
+      if(sp && !bekend.has(sp.id) && !teKoppelen.includes(sp.naam)) teKoppelen.push(sp.naam);
+    }));
+    if(teKoppelen.length && !confirm('Deze namen staan al in Rondje! (bijvoorbeeld van een eerder toernooi) en worden aan je toernooi gekoppeld:\n\n'+teKoppelen.join('\n')+'\n\nZijn dit dezelfde personen? Kies OK om door te gaan. Zit er iemand anders tussen, kies dan Annuleren en pas die naam in je lijst aan.')) return;
+  }
+
   const nieuweSpelers = [];
   let gekoppeldeSpelers = 0;
   let volgordeFlight = ctx.flights.reduce((m,f)=>Math.max(m,f.volgorde),0) + 1;
@@ -3361,7 +3855,7 @@ async function importeerStartlijst(){
         if(!speler){
           const pin = genereerRandomPin();
           const hash = await maakHash(pin);
-          const rows = await sbP('spelers', {naam, pin_hash:hash});
+          const rows = await sbP('spelers', metMaker({naam, pin_hash:hash}));
           speler = rows[0];
           allSpelers.push(speler);
           nieuweSpelers.push({naam, pin});
@@ -3400,18 +3894,24 @@ async function importeerStartlijst(){
    ========================================================= */
 function renderBeheerSpelersPanel(){
   const el = document.getElementById('panel-beheer-spelers');
+  const ta = isToernooiAdmin();
+  const spelers = beheerSpelers();
+  const mijnIds = ta ? beheerToernooiIds() : null;
   el.innerHTML = `
-  <div class="sh"><div><div class="st">Spelers</div><div class="ss">${allSpelers.length} spelers</div></div>
+  <div class="sh"><div><div class="st">Spelers</div><div class="ss">${spelers.length} spelers${ta?' in jouw toernooien':''}</div></div>
     <div class="brow">
-      <button class="btn bg bsm" onclick="resetAllePincodes()">Alle pincodes op 0000</button>
+      ${ta?'':`<button class="btn bg bsm" onclick="resetAllePincodes()">Alle pincodes op 0000</button>`}
+      ${(!ta && ROLLEN_AAN)?`<button class="btn bg bsm" onclick="openSamenvoegModal()">Samenvoegen</button>`:''}
       <button class="btn bp bsm" onclick="openSpelerModal()">+ Speler</button>
     </div>
   </div>
+  ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet alleen de spelers van je eigen toernooien. Van een speler die ook aan toernooien van anderen meedoet ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
   <div class="tw"><table class="spelerstabel"><thead><tr><th>Naam</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
-  ${allSpelers.map(s=>{
-    const toern = allDeelnemers.filter(d=>d.speler_id===s.id).map(d=>toernooiById(d.toernooi_id)).filter(Boolean);
+  ${spelers.map(s=>{
+    const toern = allDeelnemers.filter(d=>d.speler_id===s.id && (!mijnIds || mijnIds.has(d.toernooi_id))).map(d=>toernooiById(d.toernooi_id)).filter(Boolean);
+    const eigen = !ta || spelerUitsluitendEigen(s.id);
     return `<tr>
-    <td><b>${esc(s.naam)}</b>${s.email?`<div class="rm">${esc(s.email)}</div>`:''}</td>
+    <td><b>${esc(s.naam)}</b>${!eigen?' <span class="sp s-gedeeld" title="Doet ook mee aan toernooien van andere beheerders">gedeeld</span>':''}${(eigen && s.email)?`<div class="rm">${esc(s.email)}</div>`:''}</td>
     <td>${fH(s.exact_hcp)}</td>
     <td>${s.actief!==false?'<span class="sp so">actief</span>':'<span class="sp sg">inactief</span>'}</td>
     <td>${toern.length?`<select style="width:100%">
@@ -3420,20 +3920,165 @@ function renderBeheerSpelersPanel(){
       </select>`:'<span class="rm">geen</span>'}</td>
     <td><div class="brow">
       <button class="btn bg bsm" onclick="openSpelerModal('${s.id}')">Bewerken</button>
-      <button class="btn bg bsm" onclick="resetSpelerPin('${s.id}')">Pincode reset</button>
+      ${eigen?`<button class="btn bg bsm" onclick="resetSpelerPin('${s.id}')">Pincode reset</button>`:''}
     </div></td>
   </tr>`;
   }).join('')}
-  </tbody></table></div>`;
+  </tbody></table></div>
+  ${(ta && !spelers.length)?'<div class="empty">Nog geen spelers. Voeg ze toe met "+ Speler", of via de deelnemers of de startlijst van je toernooi.</div>':''}
+  ${beheerdersKaartHtml()}`;
+}
+
+/* ---------- BEHEERDERS (alleen Super Admin) ---------- */
+function beheerdersKaartHtml(){
+  if(!isSuperAdmin()) return '';
+  if(!ROLLEN_AAN) return `<div class="card" style="margin-top:18px"><div class="cb">
+      <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Toernooi Admins en samenvoegen</b>
+      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.44.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
+    </div></div>`;
+  return `<div class="card" style="margin-top:18px">
+    <div class="ch"><div><div class="ct">Beheerders</div><div class="rm">Een Super Admin mag alles. Een Toernooi Admin beheert alleen zijn eigen en toegewezen toernooien.</div></div>
+      <button class="btn bp bsm" style="flex-shrink:0" onclick="openBeheerderModal()">+ Beheerder</button></div>
+    <div class="cb" style="padding-top:4px;padding-bottom:4px">
+    ${allAdmins.map(a=>{
+      const isTa = adminRol(a)==='toernooi';
+      const toern = allToernooiAdmins.filter(x=>x.admin_id===a.id).map(x=>toernooiById(x.toernooi_id)).filter(Boolean);
+      const ikzelf = ingelogdAdmin && a.id===ingelogdAdmin.id;
+      return `<div class="bh-rij">
+        <div style="min-width:0">
+          <span class="bh-naam">${esc(a.naam)}</span> <span class="sp ${isTa?'s-ta':'s-super'}">${isTa?'Toernooi Admin':'Super Admin'}</span>${ikzelf?' <span class="rm">(jij)</span>':''}
+          ${isTa?`<div class="rm">${toern.length ? esc(toern.map(t=>t.naam).join(', ')) : 'nog geen toernooi — wijs er een toe bij Toernooien beheer, of laat hem er zelf een aanmaken'}</div>`:''}
+        </div>
+        ${ikzelf?'':`<div class="brow" style="flex-shrink:0">
+          <button class="btn bg bsm" onclick="resetBeheerderWachtwoord('${a.id}')">Wachtwoord</button>
+          <button class="btn bd bsm" onclick="verwijderBeheerder('${a.id}')">×</button>
+        </div>`}
+      </div>`;
+    }).join('')}
+    </div></div>`;
+}
+function openBeheerderModal(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  openModalHtml('moBeheerder', `
+    <h3>Nieuwe beheerder</h3>
+    <div class="fg"><label>Naam <span class="hint">hiermee logt hij in, samen met zijn wachtwoord</span></label><input type="text" id="bhNaam" autocapitalize="words" autocomplete="off" placeholder="bijv. Binnert de Beaufort"></div>
+    <div class="fg"><label>Rol</label><select id="bhRol">
+      <option value="toernooi">Toernooi Admin — alleen eigen en toegewezen toernooien</option>
+      <option value="super">Super Admin — mag alles</option>
+    </select></div>
+    <div class="fg"><label>Wachtwoord <span class="hint">min. 8 tekens, letter + cijfer — hij kan het daarna zelf wijzigen</span></label><input type="text" id="bhPwd" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <div class="brow"><button class="btn bp bf" onclick="saveBeheerder()">Aanmaken</button><button class="btn bg bf" onclick="closeModal('moBeheerder')">Annuleren</button></div>
+    <p style="font-size:.74rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:10px">Inloggen gaat via de link "Beheerder?" op het inlogscherm, met deze naam en dit wachtwoord. Een beheeraccount staat los van een eventueel spelersaccount met dezelfde naam.</p>
+  `);
+}
+async function saveBeheerder(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const naam = document.getElementById('bhNaam').value.trim().replace(/\s+/g,' ');
+  const rol = document.getElementById('bhRol').value==='super' ? 'super' : 'toernooi';
+  const pwd = document.getElementById('bhPwd').value;
+  if(!naam){ toast('Vul een naam in', true); return; }
+  if(allAdmins.some(a=>naamSleutel(a.naam)===naamSleutel(naam))){ toast('Er bestaat al een beheerder met deze naam', true); return; }
+  const fout = validPwd(pwd);
+  if(fout){ toast(fout, true); return; }
+  try{
+    await sbP('admins', {naam, pwd_hash: await maakHash(pwd), rol});
+    closeModal('moBeheerder');
+    toast((rol==='super'?'Super Admin':'Toernooi Admin')+' '+naam+' aangemaakt — geef naam en wachtwoord aan hem door');
+    await laadAlles(); renderBeheerSpelersPanel();
+  }catch(e){ toast('Aanmaken mislukt: '+e.message, true); }
+}
+async function resetBeheerderWachtwoord(id){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const a = allAdmins.find(x=>x.id===id);
+  if(!a) return;
+  const nieuw = prompt('Nieuw wachtwoord voor '+a.naam+' (min. 8 tekens, letter + cijfer):');
+  if(!nieuw) return;
+  const fout = validPwd(nieuw);
+  if(fout){ toast(fout, true); return; }
+  try{
+    await sbPa('admins', id, {pwd_hash: await maakHash(nieuw)});
+    toast('Wachtwoord van '+a.naam+' gewijzigd — geef het aan hem door');
+  }catch(e){ toast('Mislukt: '+e.message, true); }
+}
+async function verwijderBeheerder(id){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const a = allAdmins.find(x=>x.id===id);
+  if(!a) return;
+  if(ingelogdAdmin && id===ingelogdAdmin.id){ toast('Je kunt je eigen account niet verwijderen', true); return; }
+  if(adminRol(a)==='super' && allAdmins.filter(x=>adminRol(x)==='super').length<=1){ toast('Er moet altijd één Super Admin overblijven', true); return; }
+  if(!confirm('Beheerder '+a.naam+' verwijderen? Hij kan dan niet meer inloggen als beheerder. Zijn toernooien, spelers en banen blijven bestaan; toernooien die alleen hij beheerde vallen terug aan de Super Admin.')) return;
+  try{ await sbD('admins', id); toast('Beheerder verwijderd'); await laadAlles(); renderBeheerSpelersPanel(); }
+  catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
+}
+
+/* ---------- SPELERS SAMENVOEGEN (alleen Super Admin) ----------
+   Voor als dezelfde persoon twee keer in de lijst staat, bijvoorbeeld doordat
+   een Toernooi Admin hem onder een iets andere naam heeft ingevoerd. Het werk
+   gebeurt in de database (functie voeg_spelers_samen uit de migratie van
+   v1.44.0), in één keer: lukt een stap niet, dan verandert er niets. */
+function openSamenvoegModal(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const opts = allSpelers.map(sp=>`<option value="${sp.id}">${esc(sp.naam)}</option>`).join('');
+  openModalHtml('moSamenvoegen', `
+    <h3>Spelers samenvoegen</h3>
+    <p style="font-size:.8rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">Voor als dezelfde persoon twee keer in de lijst staat. Alles van de dubbele speler — scorekaarten, deelnames, startlijsten, teams en muntjes — gaat naar de speler die blijft. <b>Dit kan niet ongedaan worden gemaakt.</b></p>
+    <div class="fg"><label>Dubbele speler <span class="hint">verdwijnt uit de lijst</span></label><select id="svBron" onchange="samenvoegOverzicht()"><option value="">— kies —</option>${opts}</select></div>
+    <div class="fg"><label>Speler die blijft <span class="hint">houdt zijn naam, handicap, pincode en e-mail</span></label><select id="svDoel" onchange="samenvoegOverzicht()"><option value="">— kies —</option>${opts}</select></div>
+    <div id="svOverzicht"></div>
+    <div class="brow"><button class="btn bd bf" id="svKnop" onclick="voerSamenvoegenUit()" disabled style="opacity:.5">Samenvoegen</button><button class="btn bg bf" onclick="closeModal('moSamenvoegen')">Annuleren</button></div>
+  `);
+}
+function samenvoegOverzicht(){
+  const bron = allSpelers.find(sp=>sp.id===document.getElementById('svBron').value);
+  const doel = allSpelers.find(sp=>sp.id===document.getElementById('svDoel').value);
+  const knop = document.getElementById('svKnop'), el = document.getElementById('svOverzicht');
+  const kan = !!bron && !!doel && bron.id!==doel.id;
+  knop.disabled = !kan; knop.style.opacity = kan ? '' : '.5';
+  if(bron && doel && bron.id===doel.id){ el.innerHTML = '<p style="font-size:.8rem;color:var(--red);font-family:\'Inter\',sans-serif;margin-bottom:12px">Kies twee verschillende spelers.</p>'; return; }
+  const regel = (sp, kop)=>{
+    if(!sp) return '';
+    const toern = allDeelnemers.filter(d=>d.speler_id===sp.id).map(d=>toernooiById(d.toernooi_id)).filter(Boolean).map(t=>t.naam);
+    return `<div class="rc" style="padding:9px 12px"><div class="rm" style="margin-top:0">${kop}</div><div class="rd" style="font-size:.95rem">${esc(sp.naam)}</div><div class="rm">hcp ${fH(sp.exact_hcp)} · ${toern.length ? esc(toern.join(', ')) : 'geen toernooien'}</div></div>`;
+  };
+  el.innerHTML = (bron||doel) ? `<div style="margin-bottom:12px">${regel(bron,'Verdwijnt')}${regel(doel,'Blijft')}</div>` : '';
+}
+async function voerSamenvoegenUit(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const bron = allSpelers.find(sp=>sp.id===document.getElementById('svBron').value);
+  const doel = allSpelers.find(sp=>sp.id===document.getElementById('svDoel').value);
+  if(!bron || !doel || bron.id===doel.id){ toast('Kies twee verschillende spelers', true); return; }
+  if(!confirm('"'+bron.naam+'" samenvoegen met "'+doel.naam+'"?\n\n"'+bron.naam+'" verdwijnt uit de lijst; al zijn kaarten en deelnames komen bij "'+doel.naam+'" te staan. Dit kan niet ongedaan worden gemaakt.')) return;
+  const knop = document.getElementById('svKnop');
+  if(knop) knop.disabled = true;
+  try{
+    const uit = await sbFetch('rpc/voeg_spelers_samen', {method:'POST', body:{p_bron: bron.id, p_doel: doel.id}}) || {};
+    closeModal('moSamenvoegen');
+    toast('Samengevoegd: '+(uit.kaarten||0)+' kaart(en) en '+(uit.deelnames||0)+' deelname(s) overgezet naar '+doel.naam);
+    await laadAlles(); renderBeheerSpelersPanel();
+  }catch(e){
+    if(knop) knop.disabled = false;
+    const m = String(e.message||'');
+    toast(/voeg_spelers_samen|PGRST202|schema cache/i.test(m) && !/scorekaart/i.test(m)
+      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.44.0.sql uit in Supabase.'
+      : 'Samenvoegen niet uitgevoerd: '+m, true);
+  }
 }
 function openSpelerModal(id){
   const s = id ? allSpelers.find(x=>x.id===id) : null;
+  const ta = isToernooiAdmin();
+  if(ta && s && !beheerSpelers().some(x=>x.id===s.id)){ geenRechten(); return; }
+  // Toernooi Admin + speler die ook bij anderen meedoet: alleen de handicap.
+  const gedeeld = !!(ta && s && !spelerUitsluitendEigen(s.id));
+  const vast = gedeeld ? 'disabled' : '';
+  const mijnToern = (ta && !s) ? beheerToernooien() : [];
   openModalHtml('moSpeler', `
     <h3>${s?'Speler bewerken':'Nieuwe speler'}</h3>
-    <div class="fg"><label>Naam</label><input type="text" id="spNaam" value="${s?esc(s.naam):''}"></div>
-    <div class="fg"><label>E-mail</label><input type="email" id="spEmail" value="${s&&s.email?esc(s.email):''}"></div>
+    ${gedeeld?`<p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">Deze speler doet ook mee aan toernooien van andere beheerders. Je kunt zijn handicap aanpassen; naam, e-mail, status en pincode wijzigt de Super Admin.</p>`:''}
+    <div class="fg"><label>Naam</label><input type="text" id="spNaam" value="${s?esc(s.naam):''}" ${vast}></div>
+    <div class="fg"><label>E-mail</label><input type="email" id="spEmail" value="${(s&&s.email&&!gedeeld)?esc(s.email):''}" ${vast} ${gedeeld?'placeholder="afgeschermd"':''}></div>
     <div class="fg"><label>Exacte handicap</label><input type="number" step="0.1" id="spHcp" value="${s?s.exact_hcp:''}"></div>
-    ${s?`<div class="fg"><label>Status</label><select id="spActief"><option value="1" ${s.actief!==false?'selected':''}>Actief</option><option value="0" ${s.actief===false?'selected':''}>Inactief</option></select></div>`:
+    ${(ta && !s)?`<div class="fg"><label>Toernooi <span class="hint">waar deze speler aan meedoet</span></label><select id="spToernooi"><option value="">— nog geen toernooi —</option>${mijnToern.map(t=>`<option value="${t.id}" ${mijnToern.length===1?'selected':''}>${esc(t.naam)}</option>`).join('')}</select></div>`:''}
+    ${s?`<div class="fg"><label>Status</label><select id="spActief" ${vast}><option value="1" ${s.actief!==false?'selected':''}>Actief</option><option value="0" ${s.actief===false?'selected':''}>Inactief</option></select></div>`:
       `<div class="fg"><label>Pincode <span class="hint">4 cijfers — speler kan dit later zelf wijzigen via reset</span></label><input type="password" inputmode="numeric" maxlength="4" id="spPin" autocomplete="new-password"></div>`}
     <div class="brow"><button class="btn bp bf" onclick="saveSpeler(${s?`'${s.id}'`:'null'})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moSpeler')">Annuleren</button></div>
   `);
@@ -3443,6 +4088,23 @@ async function saveSpeler(id){
   const email = document.getElementById('spEmail').value.trim();
   const hcp = parseFloat(document.getElementById('spHcp').value);
   if(!naam || isNaN(hcp)){ toast('Vul naam en handicap in', true); return; }
+  const ta = isToernooiAdmin();
+  if(ta && id && !beheerSpelers().some(x=>x.id===id)){ geenRechten(); return; }
+  const gedeeld = !!(ta && id && !spelerUitsluitendEigen(id));
+  // E-mailadres (sinds v1.45.0 de sleutel om een speler later terug te vinden):
+  // moet kloppen, en een adres dat al bij een andere speler staat vraagt om
+  // bevestiging — het kan (partners die een adres delen), maar meestal is het
+  // een vergissing. Een nieuwe speler van een Toernooi Admin loopt via
+  // koppelOfMaakSpeler, dat het adres zelf afhandelt.
+  if(email && !gedeeld){
+    if(!emailGeldig(email)){ toast('Dat e-mailadres klopt niet', true); return; }
+    if(id || !ta){
+      const oud = id ? allSpelers.find(x=>x.id===id) : null;
+      const gewijzigd = !oud || emailSleutel(oud.email)!==emailSleutel(email);
+      const ander = gewijzigd ? spelersMetEmail(email, id) : [];
+      if(ander.length && !confirm('Dit e-mailadres staat al bij '+(ta?'een andere speler':ander.map(x=>'"'+x.naam+'"').join(' en '))+'.\n\nToch opslaan? Kies Annuleren als het een vergissing is.')) return;
+    }
+  }
   try{
     let vastgelegd = [], oudeHcp = null;
     if(id){
@@ -3456,12 +4118,26 @@ async function saveSpeler(id){
         oudeHcp = Number(oud.exact_hcp);
         vastgelegd = await legAfgerondeKaartenVast(id, oudeHcp);
       }
-      await sbPa('spelers', id, {naam, email:email||null, exact_hcp:hcp, actief, hcp_bevestigd:true});
+      // Gedeelde speler (Toernooi Admin): alleen de handicap gaat mee.
+      await sbPa('spelers', id, gedeeld ? {exact_hcp:hcp, hcp_bevestigd:true} : {naam, email:email||null, exact_hcp:hcp, actief, hcp_bevestigd:true});
     } else {
       const pin = document.getElementById('spPin').value.trim();
       if(!/^\d{4}$/.test(pin)){ toast('Pincode moet 4 cijfers zijn', true); return; }
+      if(ta){
+        // Toernooi Admin: op naam koppelen of nieuw aanmaken (koppelOfMaakSpeler).
+        const tEl = document.getElementById('spToernooi');
+        const uit = await koppelOfMaakSpeler(tEl ? (tEl.value||null) : null, naam, {hcp, email:email||null, pin});
+        if(!uit) return;
+        closeModal('moSpeler');
+        toast(uit.soort==='gekoppeld'
+          ? uit.speler.naam+' stond al in Rondje! en is aan je toernooi gekoppeld — zijn eigen handicap en pincode blijven gelden'
+          : 'Speler opgeslagen');
+        await laadAlles(); renderBeheerSpelersPanel();
+        return;
+      }
+      if(allSpelers.some(x=>naamSleutel(x.naam)===naamSleutel(naam))){ toast('Er staat al een speler met deze naam in de lijst', true); return; }
       const hash = await maakHash(pin);
-      await sbP('spelers', {naam, email:email||null, exact_hcp:hcp, hcp_bevestigd:true, pin_hash:hash});
+      await sbP('spelers', metMaker({naam, email:email||null, exact_hcp:hcp, hcp_bevestigd:true, pin_hash:hash}));
     }
     closeModal('moSpeler');
     toast(vastgelegd.length
@@ -3471,6 +4147,9 @@ async function saveSpeler(id){
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
 async function resetSpelerPin(id){
+  if(isToernooiAdmin() && !(beheerSpelers().some(x=>x.id===id) && spelerUitsluitendEigen(id))){
+    toast('Deze speler doet ook mee aan toernooien van anderen — vraag de Super Admin om zijn pincode te resetten', true); return;
+  }
   const nieuw = prompt('Nieuwe 4-cijferige pincode voor deze speler:');
   if(!nieuw) return;
   if(!/^\d{4}$/.test(nieuw)){ toast('Pincode moet 4 cijfers zijn', true); return; }
@@ -3481,6 +4160,7 @@ async function resetSpelerPin(id){
   }catch(e){ toast('Mislukt: '+e.message, true); }
 }
 async function resetAllePincodes(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
   if(!allSpelers.length){ toast('Nog geen spelers', true); return; }
   if(!confirm(`Pincode van alle ${allSpelers.length} spelers op 0000 zetten? Dit is een makkelijk te raden code — gebruik dit alleen als bewuste, tijdelijke vereenvoudiging (bijv. vlak voor een toernooi).`)) return;
   try{
@@ -3506,8 +4186,9 @@ async function laadScoresVoorToernooi(toernooiId){
 }
 
 function mijnToernooien(){
-  // Admins zien alle toernooien (ook als ze zelf geen deelnemer zijn); spelers alleen waarvoor ze zijn uitgenodigd.
-  if(isAdmin()) return allToernooien;
+  // De Super Admin ziet alle toernooien (ook als hij zelf geen deelnemer is), een
+  // Toernooi Admin de toernooien die hij beheert; spelers alleen waarvoor ze zijn uitgenodigd.
+  if(isAdmin()) return beheerToernooien();
   if(!ingelogdSpeler) return [];
   const mijnIds = new Set(allDeelnemers.filter(d=>d.speler_id===ingelogdSpeler.id).map(d=>d.toernooi_id));
   return allToernooien.filter(t=>mijnIds.has(t.id));
@@ -4558,26 +5239,38 @@ async function scGridCommit(kolomIdx, holeIndex, aantalHoles){
   if(!el || !subjectId || !ingelogdSpeler) return;
   const n = parseInt(el.value,10);
   if(isNaN(n) || n<1) return;
+  scSchrijfStart(ctx);
   try{
     await scLogUpsert(subjectId, holeIndex, ingelogdSpeler.id, n);
     await scSyncOfficieleScore(subjectId);
     scGridHerrenderCel(subjectId, holeIndex);
     naarVolgendeGridHole(kolomIdx, holeIndex, aantalHoles);
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
+  finally{ scSchrijfKlaar(ctx); }
 }
 async function scGridBlur(kolomIdx, holeIndex){
   const ctx = window._scCtx;
   const el = document.getElementById('scc_'+kolomIdx+'_'+holeIndex);
-  if(!el || el.value!=='' || !ingelogdSpeler) return;
+  if(!el || !ingelogdSpeler) return;
   const subjectId = (ctx.kolomSpelers||[])[kolomIdx];
   const bestaand = (ctx.log||[]).find(l=>l.speler_id===subjectId && l.hole_index===holeIndex && l.door_speler_id===ingelogdSpeler.id);
+  if(el.value!==''){
+    // Niets gewist. Zolang de cursor in dit vakje stond is het bewust niet
+    // bijgewerkt (een live melding of het bijhalen slaat het over); haal dat
+    // nu in — maar alleen als er niets nieuws in getypt staat dat nog
+    // opgeslagen moet worden.
+    if(bestaand && String(bestaand.waarde)===el.value) scGridHerrenderCel(subjectId, holeIndex);
+    return;
+  }
   if(!bestaand) return;
+  scSchrijfStart(ctx);
   try{
     if(bestaand.id) await sbD('score_holes_log', bestaand.id);
     ctx.log = (ctx.log||[]).filter(l=>l!==bestaand);
     await scSyncOfficieleScore(subjectId);
     scGridHerrenderCel(subjectId, holeIndex);
   }catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
+  finally{ scSchrijfKlaar(ctx); }
 }
 // Slaat een (ronde, speler, hole, invoerder)-invoer op — nieuw, of bijgewerkt
 // als dezelfde invoerder deze cel al eerder had ingevuld.
@@ -4601,6 +5294,19 @@ async function scLogUpsert(spelerId, holeIndex, doorSpelerId, waarde){
 async function scSyncOfficieleScore(subjectId, ingevoerdDoor){
   const ctx = window._scCtx;
   const holeScores = scHoleScoresUitLog(ctx, subjectId);
+  // De officiële score van een MEDESPELER bestaat uitsluitend uit zijn eigen
+  // invoer (scOfficieleWaarde) en verandert dus niet doordat jij een score
+  // voor hem intikt. Tot v1.41.0 werd zijn rij in 'scores' daarbij toch
+  // opnieuw weggeschreven, vanuit het beeld dat JOUW toestel van zijn kaart
+  // had. Was dat beeld verouderd (gemiste live meldingen), dan verdwenen zijn
+  // laatst ingevoerde holes en zijn teekeuze weer uit zijn officiële kaart,
+  // tot hij zelf opnieuw iets invoerde. Heeft hij al een rij, dan blijft die
+  // nu met rust; alleen zijn eigen toestel (en de admin) werken hem bij.
+  // Heeft hij nog geen rij, dan wordt die — zoals altijd — aangemaakt.
+  if(subjectId!==ctx.spelerId && !isAdmin()){
+    const bekend = (ctx.kolomScores||[]).find(sc=>sc.speler_id===subjectId && sc.id);
+    if(bekend) return scOfficieleUitkomst(holeScores, ctx.holes, bekend.playing_hcp!=null ? bekend.playing_hcp : null);
+  }
   let pH = null, teeId = null;
   if(subjectId===ctx.spelerId){
     pH = ctx.currentPH;
@@ -5086,16 +5792,16 @@ function exporteerKlassementPdf(){
     const head = [Array.from(table.querySelectorAll('thead th')).map(th=>th.getAttribute('data-pdf') || th.innerText.replace(/\s+/g,' ').trim())];
     // Teams met het Muntjes Spel: een ronde-cel bevat dan twee cijfers
     // (Stableford en, kleiner, muntjes). Op het scherm onderscheidt de opmaak
-    // die twee; in de PDF zetten we er een schuine streep tussen.
-    // Idem voor "telt X" (ronde-uitslag wijkt af van de klassementtelling):
-    // dat komt er tussen haakjes achter.
+    // die twee; in de PDF komt het muntjescijfer achter een verticale streep.
+    // (Geen schuine streep: die staat al tussen ronde-uitslag en reguliere
+    // score bij "klassement: regulier", bv. "27 / 35 | -6".)
     const celTekst = (td)=>{
-      const munt = td.querySelector('.kls-munt'), telt = td.querySelector('.kls-telt');
-      if(!munt && !telt) return td.innerText.replace(/\s+/g,' ').trim();
+      const munt = td.querySelector('.kls-munt');
+      if(!munt) return td.innerText.replace(/\s+/g,' ').trim();
       const plat = (el)=> el.textContent.replace(/\s+/g,' ').trim();
       const kloon = td.cloneNode(true);
-      kloon.querySelectorAll('.kls-munt,.kls-telt').forEach(el=>el.remove());
-      return plat(kloon) + (telt ? ' ('+plat(telt)+')' : '') + (munt ? ' / '+plat(munt) : '');
+      kloon.querySelectorAll('.kls-munt').forEach(el=>el.remove());
+      return plat(kloon) + ' | ' + plat(munt);
     };
     // Teams: de spelersregels onder een team gaan mee (ingesprongen en grijs,
     // de teamregel zelf vet); van een dichtgeklapt team alleen de teamregel.
@@ -5159,13 +5865,21 @@ function klsSorteerOpTotaal(){
 // (rondeLabel) — die twee zijn bewust gescheiden, anders zou een ronde zonder
 // rapportagelabel als sorteersleutel haar eigen (lange, interne) unieke id
 // laten zien in plaats van haar naam.
-function klsKolomHeaderHtml(key, displayText, r0, toonSpelvormen, sorteerbaar, actief, extraSub){
+// "27 / 35": ronde-uitslag en, achter de schuine streep, de reguliere score
+// waarmee de ronde in het klassement telt (alleen bij "klassement: regulier").
+function klsPaarHtml(uitslag, telt){
+  return `<span class="kls-paar">${fmtPts(uitslag)}<span class="kls-sl"> / ${fmtPts(telt)}</span></span>`;
+}
+// Smalste breedte voor een ronde-kolom die zo'n cijferpaar toont, zodat het
+// ook bij een korte kolomnaam op een telefoon op één regel past.
+const KLS_PAAR_MIN_BREEDTE = 84;
+function klsKolomHeaderHtml(key, displayText, r0, toonSpelvormen, sorteerbaar, actief, extraSub, minBreedte){
   const combi = r0 ? combinatieById(r0.combinatie_id) : null;
   const sub = (t)=>`<div style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.64rem;opacity:.85;line-height:1;margin-top:2px">${esc(t)}</div>`;
   const kEsc = String(key).replace(/'/g,"\\'").replace(/"/g,'&quot;');
   const klikAttr = sorteerbaar ? ` onclick="klsSorteerOpRonde('${kEsc}')" title="Sorteer op deze ronde"` : '';
   const extraStyle = sorteerbaar ? `cursor:pointer;${actief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}` : '';
-  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${rondeKolomBreedte(displayText)}px;white-space:normal;line-height:1;${extraStyle}">${esc(displayText)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}${[].concat(extraSub||[]).filter(Boolean).map(sub).join('')}</th>`;
+  return `<th class="rk"${klikAttr} style="text-align:center;vertical-align:top;width:${Math.max(minBreedte||0, rondeKolomBreedte(displayText))}px;white-space:normal;line-height:1;${extraStyle}">${esc(displayText)}${combi&&combi.naam?sub(combi.naam):''}${toonSpelvormen?sub(spelvormLabel(r0)):''}${[].concat(extraSub||[]).filter(Boolean).map(sub).join('')}</th>`;
 }
 // Numerieke waarde van één ronde-cel voor een gegeven klassement-mode —
 // dezelfde onderliggende getallen als de cel()/totaal()-weergave in
@@ -5280,7 +5994,7 @@ async function tekenKlassementBody(toernooiId, mode){
   function cel(pl, label){
     if(!pl) return '<span style="color:var(--tl)">—</span>';
     if(!pl.compleet) return '<span style="color:var(--tl)">bezig</span>';
-    if(mode==='stableford') return fmtPts(pl.stableford) + (klsRegLabels.has(label) ? `<span class="kls-telt">telt ${fmtPts(pl.klassement)}</span>` : '');
+    if(mode==='stableford') return klsRegLabels.has(label) ? klsPaarHtml(pl.stableford, pl.klassement) : fmtPts(pl.stableford);
     if(mode==='abs-netto') return pl.absNetto;
     if(mode==='abs-bruto') return pl.absBruto;
     if(mode==='strokeplay-netto') return pl.strokeplayNetto;
@@ -5308,7 +6022,8 @@ async function tekenKlassementBody(toernooiId, mode){
     <th style="width:38px;vertical-align:top">#</th><th style="width:${spelerBreedte}px;vertical-align:top">Speler</th>
     ${labels.map(l=>{
       const r0 = rondes.find(r=>rondeLabelKey(r)===l);
-      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, (mode==='stableford' && klsRegLabels.has(l))?'klassement: regulier':'');
+      const paar = mode==='stableford' && klsRegLabels.has(l);
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, paar?'klassement: regulier':'', paar?KLS_PAAR_MIN_BREEDTE:0);
     }).join('')}
     <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
@@ -5328,7 +6043,7 @@ async function tekenKlassementBody(toernooiId, mode){
   }).join('')}
   </tbody></table></div>
   ${mode==='stableford'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">Cijfers zijn netto Stableford-punten per kolom. Hoogste totaal wint.</p>':''}
-  ${(mode==='stableford' && klsRegLabels.size)?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" is het grote cijfer de ronde-uitslag volgens de afwijkende scoring. In het totaal telt de volledige, reguliere score van die ronde — dat is het kleine cijfer achter "telt". Sorteren op zo\'n ronde gaat op de ronde-uitslag.</p>':''}
+  ${(mode==='stableford' && klsRegLabels.size)?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" staan er twee cijfers: vóór de schuine streep de ronde-uitslag volgens de afwijkende scoring, erachter de volledige, reguliere score van die ronde — die telt in het totaal. Sorteren op zo\'n ronde gaat op de ronde-uitslag.</p>':''}
   ${mode==='abs-netto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">ABS (adjusted) netto strokeplay: score per hole gemaximeerd op het punt waarop nog precies 0 stablefordpunten worden gehaald (bijv. par 5 met 1 slag mee → max. 8), min playing handicap. Laagste totaal wint.</p>':''}
   ${mode==='abs-bruto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">ABS (adjusted) bruto strokeplay: score per hole gemaximeerd op het punt waarop nog precies 0 stablefordpunten worden gehaald. Laagste totaal wint.</p>':''}
   ${mode==='strokeplay-netto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">Strokeplay netto: totaal aantal slagen min playing handicap, zonder aftopping per hole. Laagste totaal wint.</p>':''}
@@ -5455,7 +6170,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
   // zodat gelijke punten in elk team een even lang balkje geven.
   const kolomMax = {}; labels.forEach(l=>{ kolomMax[l] = Math.max(0, ...alleLeden.map(x=>x.perLabel[l]||0)); });
   const totaalMax = Math.max(0, ...alleLeden.map(x=>x.totaal||0));
-  const bijdrage = (waarde, max, top, kleur)=> `<span class="kls-bij${top?' top':''}"><b>${fmtPts(waarde)}</b><i><i style="--w:${max>0?Math.max(0,Math.min(100,Math.round(waarde/max*100))):0}%;--tk:${kleur}"></i></i></span>`;
+  const bijdrage = (waarde, max, top, kleur, telt)=> `<span class="kls-bij${top?' top':''}"><b>${telt!=null?klsPaarHtml(waarde, telt):fmtPts(waarde)}</b><i><i style="--w:${max>0?Math.max(0,Math.min(100,Math.round(waarde/max*100))):0}%;--tk:${kleur}"></i></i></span>`;
   const streep = '<span style="color:var(--tl)">—</span>';
   const dicht = klsTeamsDicht(toernooiId);
   const aantalKolommen = 2 + labels.length + (toonMuntjes?2:1);
@@ -5475,7 +6190,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
         const w = lid.perLabel[l];
         const ids = lid.scoreIds[l];
         const klik = (w!=null && ids && ids.length) ? ` class="klikbaar" onclick='openScorekaartPopup(${JSON.stringify(ids)})'` : '';
-        return `<td style="text-align:center"${klik}>${w!=null?bijdrage(w, kolomMax[l], w===teamTop[l], kleur):streep}${(klsRegLabels.has(l) && w!=null)?`<span class="kls-telt">telt ${fmtPts(lid.kPerLabel[l])}</span>`:''}${(muntLabels.has(l) && lid.mPerLabel[l]!=null)?`<span class="kls-munt">${fmtMunt(lid.mPerLabel[l])}</span>`:''}</td>`;
+        return `<td style="text-align:center"${klik}>${w!=null?bijdrage(w, kolomMax[l], w===teamTop[l], kleur, klsRegLabels.has(l)?lid.kPerLabel[l]:null):streep}${(muntLabels.has(l) && lid.mPerLabel[l]!=null)?`<span class="kls-munt">${fmtMunt(lid.mPerLabel[l])}</span>`:''}</td>`;
       }).join('')}
       <td${toonMuntjes?' class="kls-tot"':''} style="text-align:center">${speelde?bijdrage(lid.totaal, totaalMax, lid.totaal===totTop, kleur):streep}</td>
       ${toonMuntjes?`<td class="kls-tot" style="text-align:center">${lid.mTotaal!=null?`<span class="kls-munt-tot">${fmtMunt(lid.mTotaal)}</span>`:streep}</td>`:''}
@@ -5493,7 +6208,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     <th style="width:38px;vertical-align:top">#</th><th style="width:${teamBreedte}px;vertical-align:top">Team</th>
     ${labels.map(l=>{
       const r0 = rondes.find(r=>rondeLabelKey(r)===l);
-      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, [klsRegLabels.has(l)?'klassement: regulier':'', muntLabels.has(l)?'Stableford / Muntjes':''].filter(Boolean));
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, [klsRegLabels.has(l)?'klassement: regulier':'', muntLabels.has(l)?'Stableford | Muntjes':''].filter(Boolean), klsRegLabels.has(l)?KLS_PAAR_MIN_BREEDTE:0);
     }).join('')}
     ${toonMuntjes
       ? `<th class="kls-tot-stb" data-pdf="Stableford" onclick="klsSorteerOpTotaal()" title="Sorteer op Stableford-totaal" style="text-align:center;vertical-align:top;white-space:normal;cursor:pointer;${(!sortLabelActief && !sortMuntjes)?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}"><span class="kls-lang">Stableford</span><span class="kls-kort">STB</span></th>
@@ -5505,7 +6220,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
     return `<tr class="kls-team${dicht.has(tAgg.team.id)?' dicht':''}" data-team="${tAgg.team.id}" onclick="klsToggleTeam('${tAgg.team.id}')" title="Tik om de spelers van dit team te verbergen of te tonen">
       <td><span class="rb ${rb}">${i+1}</span></td>
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${tAgg.team.kleur};margin-right:6px;vertical-align:middle"></span><b>${esc(tAgg.team.naam)}</b></td>
-      ${labels.map(l=>`<td style="text-align:center">${tAgg.perLabel[l]!=null?fmtPts(tAgg.perLabel[l]):'<span style="color:var(--tl)">—</span>'}${(klsRegLabels.has(l) && tAgg.perLabel[l]!=null)?`<span class="kls-telt">telt ${fmtPts(tAgg.kPerLabel[l])}</span>`:''}${muntLabels.has(l)?`<span class="kls-munt">${fmtMunt(tAgg.mPerLabel[l]==null?null:tAgg.mPerLabel[l])}</span>`:''}</td>`).join('')}
+      ${labels.map(l=>`<td style="text-align:center">${tAgg.perLabel[l]!=null?(klsRegLabels.has(l)?klsPaarHtml(tAgg.perLabel[l], tAgg.kPerLabel[l]):fmtPts(tAgg.perLabel[l])):'<span style="color:var(--tl)">—</span>'}${muntLabels.has(l)?`<span class="kls-munt">${fmtMunt(tAgg.mPerLabel[l]==null?null:tAgg.mPerLabel[l])}</span>`:''}</td>`).join('')}
       <td${toonMuntjes?' class="kls-tot"':''} style="text-align:center"><b style="color:var(--gd)">${fmtPts(tAgg.totaal)}</b></td>
       ${toonMuntjes?`<td class="kls-tot" style="text-align:center"><b class="kls-munt-tot">${fmtMunt(tAgg.mTotaal)}</b></td>`:''}
     </tr>${ledenRijenHtml(tAgg)}`;
@@ -5513,7 +6228,7 @@ function renderTeamsKlassementBody(body, toernooiId, rondes, labels, labelText, 
   </tbody></table></div>
   <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:8px">Teamscore = som van de netto Stableford-punten van de teamleden per ronde. Hoogste totaal wint.</p>
   <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Onder elk team staat wat iedere speler per ronde heeft bijgedragen; de hoogste bijdrage binnen het team is vet, en het balkje laat zien hoe die zich verhoudt tot de beste score van die ronde. Tik op een team om de spelers te verbergen, of op een score om de kaart te zien.</p>
-  ${klsRegLabels.size?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" is het grote cijfer de ronde-uitslag volgens de afwijkende scoring; in het totaal telt de reguliere score van die ronde (het kleine cijfer achter "telt").</p>`:''}
+  ${klsRegLabels.size?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" staan er twee cijfers: vóór de schuine streep de ronde-uitslag volgens de afwijkende scoring, erachter de reguliere score van die ronde — die telt in het totaal.</p>`:''}
   ${toonMuntjes?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Het kleine cijfer met het muntje is het muntjestotaal van het team in die ronde. Muntjes zijn een apart spel: ze staan in hun eigen totaalkolom en tellen niet mee in de Stableford-teamscore (STB). Tik op "Muntjes" om daarop te sorteren.</p>`:''}
   <p style="font-size:.68rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">Tik op een ronde-kolom om alleen op die ronde te sorteren, of op ${toonMuntjes?'het Stableford-totaal':'"Totaal"'} om terug te gaan.</p>
   `;
