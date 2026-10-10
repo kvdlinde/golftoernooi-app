@@ -326,14 +326,23 @@ tr:last-child td{border-bottom:none}
 #klsBody table td:nth-child(1),#klsBody table td:nth-child(2){background:var(--wh)}
 /* Spelersbeheer-tabel: vaste kolombreedtes zodat Naam/Hcp/Status/Toernooien/Acties
    netjes naast elkaar staan i.p.v. dat de browser de ruimte willekeurig verdeelt. */
-.spelerstabel{table-layout:fixed;min-width:680px}
-.spelerstabel th:nth-child(1),.spelerstabel td:nth-child(1){width:24%}
+.spelerstabel{table-layout:fixed;min-width:740px}
+.spelerstabel th:nth-child(1),.spelerstabel td:nth-child(1){width:28%}
 .spelerstabel th:nth-child(2),.spelerstabel td:nth-child(2){width:8%}
 .spelerstabel th:nth-child(3),.spelerstabel td:nth-child(3){width:10%}
-.spelerstabel th:nth-child(4),.spelerstabel td:nth-child(4){width:20%}
-.spelerstabel th:nth-child(5),.spelerstabel td:nth-child(5){width:38%}
+.spelerstabel th:nth-child(4),.spelerstabel td:nth-child(4){width:19%}
+.spelerstabel th:nth-child(5),.spelerstabel td:nth-child(5){width:35%}
 .spelerstabel td:nth-child(5) .brow{flex-wrap:nowrap}
 .spelerstabel td:nth-child(5) .btn{white-space:nowrap}
+/* Spelers aanvinken (Super Admin) */
+.sp-naamrij{display:flex;align-items:flex-start;gap:10px}
+.sp-naamrij>div{min-width:0}
+.sp-kiesalles{display:flex;align-items:center;gap:10px;cursor:pointer}
+input.sp-kies,.sp-kiesalles input{width:20px;height:20px;flex-shrink:0;margin:1px 0 0;accent-color:var(--gm);cursor:pointer}
+.weg-lijst{margin:6px 0 14px;padding:0;list-style:none;border:1.5px solid var(--cd);border-radius:var(--r);max-height:180px;overflow-y:auto;-webkit-overflow-scrolling:touch;font-family:'Inter',sans-serif;font-size:.86rem}
+.weg-lijst li{padding:8px 12px;border-bottom:1px solid var(--cd)}
+.weg-lijst li:last-child{border-bottom:none}
+.weg-lijst li span{display:block;font-size:.74rem;color:var(--tl)}
 /* Op desktop breekt de Spelers-tabel uit de smalle (mobiel-georiënteerde) .main-kolom
    zodat de Acties-kolom nooit buiten beeld valt — i.p.v. horizontaal te moeten scrollen. */
 @media (min-width:700px){
@@ -498,7 +507,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.45.0';
+const APP_VERSION = '1.47.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -541,6 +550,17 @@ function isIngelogd(){ return !!ingelogdSpeler || !!ingelogdAdmin; }
    alles zoals voorheen: elk beheeraccount is dan Super Admin. */
 let allAdmins = [], allToernooiAdmins = [];
 let ROLLEN_AAN = false;
+// Eigen spelerslijst van een Toernooi Admin (sinds v1.46.0, tabel
+// 'admin_spelers'): een bestaande speler die hij aan zijn lijst heeft gekoppeld
+// zonder dat die al aan een van zijn toernooien meedoet. Zo maakt het niet uit
+// of hij eerst zijn spelers of eerst zijn toernooi invoert. Bestaat de tabel
+// nog niet (migratie-1.46.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
+// en kan koppelen alleen via een toernooi, zoals in v1.45.0.
+let allAdminSpelers = [];
+let SPELERSLIJST_AAN = false;
+function mijnLijstRij(spelerId){
+  return ingelogdAdmin ? (allAdminSpelers.find(x=>x.admin_id===ingelogdAdmin.id && x.speler_id===spelerId) || null) : null;
+}
 function adminRol(a){ return (a && a.rol==='toernooi') ? 'toernooi' : 'super'; }
 function isSuperAdmin(){ return !!ingelogdAdmin && (!ROLLEN_AAN || adminRol(ingelogdAdmin)==='super'); }
 function isToernooiAdmin(){ return !!ingelogdAdmin && !isSuperAdmin(); }
@@ -563,13 +583,14 @@ function magToernooiVerwijderen(t){
 }
 // De spelers die de ingelogde beheerder mag zien: de Super Admin iedereen, een
 // Toernooi Admin alleen wie aan een van zijn toernooien meedoet, plus spelers
-// die hij zelf heeft aangemaakt en nog nergens heeft ingedeeld.
+// die hij zelf heeft aangemaakt of aan zijn eigen spelerslijst heeft gekoppeld.
 function beheerSpelers(){
   if(isSuperAdmin()) return allSpelers;
   if(!isToernooiAdmin()) return [];
   const ids = beheerToernooiIds();
   const inMijn = new Set(allDeelnemers.filter(d=>ids.has(d.toernooi_id)).map(d=>d.speler_id));
-  return allSpelers.filter(sp=>inMijn.has(sp.id) || sp.aangemaakt_door===ingelogdAdmin.id);
+  const inLijst = new Set(allAdminSpelers.filter(x=>x.admin_id===ingelogdAdmin.id).map(x=>x.speler_id));
+  return allSpelers.filter(sp=>inMijn.has(sp.id) || inLijst.has(sp.id) || sp.aangemaakt_door===ingelogdAdmin.id);
 }
 // Doet deze speler UITSLUITEND mee aan toernooien van de ingelogde Toernooi
 // Admin? Alleen dan mag die zijn naam, e-mail, status en pincode aanpassen —
@@ -578,8 +599,14 @@ function spelerUitsluitendEigen(spelerId){
   if(isSuperAdmin()) return true;
   if(!isToernooiAdmin()) return false;
   const ids = beheerToernooiIds();
+  // Staat hij (ook) in de spelerslijst van een andere beheerder, dan is hij gedeeld.
+  if(allAdminSpelers.some(x=>x.speler_id===spelerId && x.admin_id!==ingelogdAdmin.id)) return false;
   const rijen = allDeelnemers.filter(d=>d.speler_id===spelerId);
-  if(!rijen.length){ const sp = allSpelers.find(x=>x.id===spelerId); return !!sp && sp.aangemaakt_door===ingelogdAdmin.id; }
+  const sp = allSpelers.find(x=>x.id===spelerId);
+  const zelfGemaakt = !!sp && sp.aangemaakt_door===ingelogdAdmin.id;
+  if(!rijen.length) return zelfGemaakt;
+  // Alleen in mijn lijst gekoppeld en niet door mij aangemaakt: van een ander.
+  if(mijnLijstRij(spelerId) && !zelfGemaakt && !rijen.some(d=>ids.has(d.toernooi_id))) return false;
   return rijen.every(d=>ids.has(d.toernooi_id));
 }
 // Banen: iedereen ziet ze allemaal. Een Toernooi Admin mag er nieuwe aan
@@ -1065,6 +1092,19 @@ create table if not exists toernooi_admins (
 alter table toernooi_admins enable row level security;
 drop policy if exists "allow all" on toernooi_admins; create policy "allow all" on toernooi_admins for all using (true);
 
+-- 2b. Eigen spelerslijst van een Toernooi Admin (sinds v1.46.0): bestaande
+--     spelers die hij aan zijn lijst heeft gekoppeld zonder dat ze al aan een
+--     van zijn toernooien meedoen.
+create table if not exists admin_spelers (
+  id uuid default gen_random_uuid() primary key,
+  admin_id uuid not null references admins(id) on delete cascade,
+  speler_id uuid not null references spelers(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique(admin_id, speler_id)
+);
+alter table admin_spelers enable row level security;
+drop policy if exists "allow all" on admin_spelers; create policy "allow all" on admin_spelers for all using (true);
+
 -- 3. Wie iets heeft aangemaakt. Leeg bij alles wat al bestond (= van de Super Admin).
 --    Bepaalt wat een Toernooi Admin mag bewerken of verwijderen.
 alter table toernooien add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
@@ -1181,6 +1221,15 @@ begin
   -- Gewonnen prijzen (Neary/Leary/Longest).
   update ronde_extra_prijzen set winnaar_speler_id = p_doel where winnaar_speler_id = p_bron;
   get diagnostics n_prijzen = row_count;
+
+  -- Spelerslijsten van Toernooi Admins (sinds v1.46.0): wie de dubbele speler in
+  -- zijn lijst had, krijgt de speler die blijft.
+  begin
+    insert into admin_spelers (admin_id, speler_id)
+      select admin_id, p_doel from admin_spelers where speler_id = p_bron
+      on conflict (admin_id, speler_id) do nothing;
+  exception when undefined_table then null;
+  end;
 
   delete from spelers where id = p_bron;
 
@@ -1371,6 +1420,11 @@ async function laadRollen(){
   }
   // Een rol die de Super Admin intussen heeft gewijzigd geldt meteen.
   if(ingelogdAdmin){ const vers = allAdmins.find(a=>a.id===ingelogdAdmin.id); if(vers) ingelogdAdmin = vers; }
+  // Eigen spelerslijsten van Toernooi Admins (migratie-1.46.0.sql).
+  if(ROLLEN_AAN){
+    try{ allAdminSpelers = await sbG('admin_spelers','') || []; SPELERSLIJST_AAN = true; }
+    catch(e){ allAdminSpelers = []; SPELERSLIJST_AAN = false; }
+  } else { allAdminSpelers = []; SPELERSLIJST_AAN = false; }
 }
 async function laadAlles(){
   await laadRollen();
@@ -1678,11 +1732,12 @@ function renderHeader(){
 // Een speler typt zijn naam en pincode. Er staat bewust géén namenlijst meer
 // op het inlogscherm: wie de app opent ziet niet wie er meedoen. Hoofdletters
 // en extra spaties maken niet uit. Beheerders loggen in via de link
-// "Beheerder?" onder het formulier (beheernaam + wachtwoord).
+// "Beheerder" onder het formulier (beheernaam + wachtwoord).
 let loginModus = 'speler';
 function renderLoginPanel(modus){
   const el = document.getElementById('panel-login');
-  loginModus = modus || (localStorage.getItem('laatste_login')==='__admin__' ? 'admin' : 'speler');
+  // De app opent altijd op de speler-inlog; beheerders kiezen zelf "Beheerder".
+  loginModus = modus==='admin' ? 'admin' : 'speler';
   const admin = loginModus==='admin';
   // Met maar één beheeraccount blijft het zoals het was: alleen het wachtwoord.
   const metBeheernaam = admin && allAdmins.length>1;
@@ -1700,8 +1755,7 @@ function renderLoginPanel(modus){
       </form>
     </div>
   </div>
-  ${admin?'':`<p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;text-align:center;margin-top:4px">Hoofdletters maken niet uit. Lukt inloggen niet? Vraag de organisatie hoe je naam is ingevoerd.</p>`}
-  <button type="button" class="login-link" id="loginWissel" onclick="renderLoginPanel('${admin?'speler':'admin'}')">${admin?'← Inloggen als speler':'Beheerder? Log hier in'}</button>`;
+  <button type="button" class="login-link" id="loginWissel" onclick="renderLoginPanel('${admin?'speler':'admin'}')">${admin?'← Speler':'Beheerder'}</button>`;
   // Zet de naam waarmee op dit toestel het laatst is ingelogd alvast klaar.
   if(admin){
     const naamVeld = document.getElementById('loginAdminNaam');
@@ -1768,7 +1822,7 @@ function logoutSpeler(){
   localStorage.removeItem('speler_id');
   boot();
 }
-// Inloggen als beheerder via hetzelfde loginscherm (link "Beheerder?").
+// Inloggen als beheerder via hetzelfde loginscherm (link "Beheerder").
 // - Eén beheeraccount: alleen het wachtwoord, zoals altijd.
 // - Meerdere accounts (sinds v1.44.0: Super Admin + Toernooi Admins): naam +
 //   wachtwoord, en alleen dát account wordt gecontroleerd. Bewust geen
@@ -3120,70 +3174,108 @@ async function heropenRonde(id){
 // SPELERS KOPPELEN OP E-MAIL OF NAAM (v1.44.0, e-mail sinds v1.45.0)
 // Een speler toevoegen gaat in deze volgorde:
 // 1. E-mailadres ingevuld en al bekend in Rondje! -> de app noemt de naam die
-//    erbij hoort en vraagt of die speler aan het toernooi moet worden gekoppeld.
-//    De match is altijd op het VOLLEDIGE adres: een Toernooi Admin kan zo niet
-//    door de spelerslijst bladeren.
+//    erbij hoort en vraagt of die speler moet worden gekoppeld. De match is
+//    altijd op het VOLLEDIGE adres: een Toernooi Admin kan zo niet door de
+//    spelerslijst bladeren.
 // 2. Anders op naam: bestaat de naam al — ook als dat van een toernooi is waar
 //    een Toernooi Admin niet bij kan — dan vraagt de app of het dezelfde
 //    persoon is en koppelt hem; verder wordt er niets van die speler getoond.
 // 3. Bestaat hij nog niet, dan wordt de speler aangemaakt.
+// Koppelen gaat aan het toernooi (toernooiId), of — zonder toernooi, sinds
+// v1.46.0 — aan de eigen spelerslijst van de Toernooi Admin. De volgorde
+// "eerst spelers, dan een toernooi" of andersom maakt zo niet uit.
+// opties.bijVerlaten = 'naam' | 'email': de controle draait al op het moment
+// dat de beheerder dat veld verlaat. Dan wordt er alleen iets gevraagd als de
+// speler al bestaat; er wordt niets aangemaakt en er komen geen foutmeldingen.
 // Geeft terug wat er gebeurd is, of null als er niets is gedaan.
+let koppelGeweigerd = new Set();   // in dit venster al met "nee" beantwoord ('naam:…' / 'email:…')
+let koppelBezig = false;           // er loopt een koppeling vanuit het verlaten van een veld
 async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   opties = opties || {};
+  const verlaten = opties.bijVerlaten || null;
+  const meld = tekst => { if(!verlaten) toast(tekst, true); return null; };
   const naam = String(naamRuw==null?'':naamRuw).trim().replace(/\s+/g,' ');
   const email = String(opties.email==null?'':opties.email).trim();
-  if(!naam && !email){ toast('Vul een e-mailadres of een naam in', true); return null; }
-  if(email && !emailGeldig(email)){ toast('Dat e-mailadres klopt niet', true); return null; }
-  if(toernooiId && !magToernooiBeheren(toernooiId)){ geenRechten(); return null; }
-  const doetAlMee = sp => allDeelnemers.some(d=>d.toernooi_id===toernooiId && d.speler_id===sp.id);
+  if(!naam && !email) return meld('Vul een e-mailadres of een naam in');
+  if(email && !emailGeldig(email)) return meld('Dat e-mailadres klopt niet');
+  if(toernooiId && !magToernooiBeheren(toernooiId)){ if(!verlaten) geenRechten(); return null; }
+  // Zonder toernooi koppelt een Toernooi Admin aan zijn eigen spelerslijst.
+  const naarLijst = !toernooiId;
+  const kanKoppelen = !!toernooiId || (isToernooiAdmin() && SPELERSLIJST_AAN);
+  const bekend = sp => beheerSpelers().some(x=>x.id===sp.id);
+  const doetAlMee = sp => naarLijst ? bekend(sp) : allDeelnemers.some(d=>d.toernooi_id===toernooiId && d.speler_id===sp.id);
+  const alMeeTekst = sp => sp.naam+(naarLijst ? ' staat al in je spelerslijst' : ' doet al mee aan dit toernooi');
+  const waar = naarLijst ? 'je spelerslijst' : (isToernooiAdmin() ? 'je toernooi' : 'het toernooi');
   const koppel = async (sp, via) => {
-    const rijen = await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id:sp.id, status:'uitgenodigd'});
-    if(rijen && rijen[0]) allDeelnemers.push(rijen[0]);
-    return {soort:'gekoppeld', speler:sp, via};
+    if(naarLijst){
+      const rijen = await sbP('admin_spelers', {admin_id: ingelogdAdmin.id, speler_id: sp.id});
+      if(rijen && rijen[0]) allAdminSpelers.push(rijen[0]);
+    } else {
+      const rijen = await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id:sp.id, status:'uitgenodigd'});
+      if(rijen && rijen[0]) allDeelnemers.push(rijen[0]);
+    }
+    return {soort:'gekoppeld', speler:sp, via, inLijst: naarLijst};
   };
   // --- 1. op e-mailadres
-  if(email){
+  if(email && verlaten!=='naam'){
     const metAdres = spelersMetEmail(email);
-    let treffer = metAdres.find(sp=>naam && naamSleutel(sp.naam)===naamSleutel(naam)) || (metAdres.length===1 ? metAdres[0] : null);
+    const treffer = metAdres.find(sp=>naam && naamSleutel(sp.naam)===naamSleutel(naam)) || (metAdres.length===1 ? metAdres[0] : null);
     if(!treffer && metAdres.length>1){
-      toast(naam ? 'Dit e-mailadres hoort bij meer dan één speler, maar niet bij deze naam — controleer de naam' : 'Dit e-mailadres hoort bij meer dan één speler — vul ook de naam in', true);
-      return null;
+      return meld(naam ? 'Dit e-mailadres hoort bij meer dan één speler, maar niet bij deze naam — controleer de naam' : 'Dit e-mailadres hoort bij meer dan één speler — vul ook de naam in');
     }
     if(treffer){
       const zelfdeNaam = !naam || naamSleutel(treffer.naam)===naamSleutel(naam);
-      if(!toernooiId){ toast('Dit e-mailadres staat al in Rondje!. Kies een toernooi om deze speler aan te koppelen.', true); return null; }
+      if(!kanKoppelen) return meld('Dit e-mailadres staat al in Rondje!. Voeg deze speler toe bij je toernooi, via "+ Deelnemer".');
+      const sleutelE = 'email:'+emailSleutel(email);
       if(doetAlMee(treffer)){
-        if(zelfdeNaam){ toast(treffer.naam+' doet al mee aan dit toernooi', true); return null; }
-        if(!confirm('Dit e-mailadres hoort bij "'+treffer.naam+'", en die doet al mee aan dit toernooi.\n\nWil je "'+naam+'" als aparte speler met hetzelfde e-mailadres toevoegen?')) return null;
+        if(zelfdeNaam){ toast(alMeeTekst(treffer), true); return null; }
+        if(verlaten) return null;   // andere naam erbij getypt: pas bij Opslaan vragen
+        if(!confirm('Dit e-mailadres hoort bij "'+treffer.naam+'", en die '+(naarLijst?'staat al in je spelerslijst':'doet al mee aan dit toernooi')+'.\n\nWil je "'+naam+'" als aparte speler met hetzelfde e-mailadres toevoegen?')) return null;
       } else {
-        const alBekend = beheerSpelers().some(sp=>sp.id===treffer.id);
+        const alBekend = bekend(treffer);
         // Alleen zonder vraag als de beheerder de speler al kent én zelf de
-        // juiste naam erbij heeft getypt; bij alleen een adres altijd vragen.
-        if(naam && zelfdeNaam && alBekend) return await koppel(treffer, 'email');
-        if(confirm('Dit e-mailadres hoort bij "'+treffer.naam+'"'+(alBekend?'':', die al in Rondje! staat — bijvoorbeeld van een eerder toernooi')+'.\n\nKies OK om '+treffer.naam+' aan het toernooi toe te voegen. Zijn handicap en pincode blijven zoals ze zijn.')) return await koppel(treffer, 'email');
-        if(zelfdeNaam) return null;
+        // juiste naam erbij heeft getypt en op Toevoegen/Opslaan heeft gedrukt.
+        if(!verlaten && naam && zelfdeNaam && alBekend) return await koppel(treffer, 'email');
+        let zojuistGeweigerd = false;
+        if(!koppelGeweigerd.has(sleutelE)){
+          if(confirm('Dit e-mailadres hoort bij "'+treffer.naam+'"'+(alBekend?'':', die al in Rondje! staat — bijvoorbeeld van een eerder toernooi')+'.\n\nKies OK om '+treffer.naam+' aan '+waar+' toe te voegen. Zijn handicap en pincode blijven zoals ze zijn.')) return await koppel(treffer, 'email');
+          // Alleen onthouden als de vraag bij het verlaten van het veld kwam: drukt
+          // hij daarna meteen op de knop, dan niet nog eens hetzelfde vragen.
+          if(verlaten) koppelGeweigerd.add(sleutelE);
+          zojuistGeweigerd = true;
+        }
+        if(verlaten) return null;
+        if(zelfdeNaam) return zojuistGeweigerd ? null : meld('Dit e-mailadres is al in gebruik bij een andere speler — laat het leeg of vul een ander adres in');
         if(!confirm('Wil je "'+naam+'" dan als aparte speler met hetzelfde e-mailadres toevoegen?')) return null;
       }
     } else if(!naam){
-      toast('Dit e-mailadres is nog niet bekend — vul ook de naam in', true); return null;
+      return meld('Dit e-mailadres is nog niet bekend — vul ook de naam in');
     }
+    if(verlaten==='email') return null;   // adres niet bekend: verder niets bij het verlaten van het veld
   }
   // --- 2. op naam
+  if(!naam) return null;
   const bestaand = allSpelers.find(sp=>naamSleutel(sp.naam)===naamSleutel(naam));
   if(bestaand){
-    if(!toernooiId){ toast('Deze naam staat al in Rondje!. Kies een toernooi om deze speler aan te koppelen.', true); return null; }
-    if(doetAlMee(bestaand)){ toast(bestaand.naam+' doet al mee aan dit toernooi', true); return null; }
-    const alBekend = beheerSpelers().some(sp=>sp.id===bestaand.id);
-    if(!alBekend && !confirm('Er staat al een speler met de naam "'+bestaand.naam+'" in Rondje! — bijvoorbeeld van een eerder toernooi.\n\nIs dit dezelfde persoon? Kies OK om hem aan je toernooi te koppelen. Zijn handicap en pincode blijven zoals ze zijn.\n\nIs het iemand anders, kies dan Annuleren en voer de naam iets anders in (bijvoorbeeld met een tweede voornaam of initiaal).')) return null;
+    if(!kanKoppelen) return meld('Deze naam staat al in Rondje!. Voeg deze speler toe bij je toernooi, via "+ Deelnemer".');
+    if(doetAlMee(bestaand)){ toast(alMeeTekst(bestaand), true); return null; }
+    const alBekend = bekend(bestaand);
+    const sleutelN = 'naam:'+naamSleutel(naam);
+    if(koppelGeweigerd.has(sleutelN)) return meld('Er staat al een andere speler met deze naam in Rondje! — voer de naam iets anders in (bijvoorbeeld met een tweede voornaam of initiaal)');
+    const vraag = alBekend
+      ? bestaand.naam+' staat al in je spelerslijst.\n\nKies OK om hem aan '+waar+' toe te voegen.'
+      : 'Er staat al een speler met de naam "'+bestaand.naam+'" in Rondje! — bijvoorbeeld van een eerder toernooi.\n\nIs dit dezelfde persoon? Kies OK om hem aan '+waar+' toe te voegen. Zijn handicap en pincode blijven zoals ze zijn.\n\nIs het iemand anders, kies dan Annuleren en voer de naam iets anders in (bijvoorbeeld met een tweede voornaam of initiaal).';
+    if((!alBekend || verlaten) && !confirm(vraag)){ if(verlaten) koppelGeweigerd.add(sleutelN); return null; }
     const uit = await koppel(bestaand, 'naam');
     // Had deze speler nog geen e-mailadres, dan wordt het ingevulde adres
     // bewaard (nooit een bestaand adres overschrijven): de volgende keer is
     // hij daarmee te vinden.
-    if(email && !bestaand.email){
+    if(email && !verlaten && !bestaand.email){
       try{ await sbPa('spelers', bestaand.id, {email}); bestaand.email = email; uit.emailBewaard = true; }catch(e){ /* niet erg: koppelen is gelukt */ }
     }
     return uit;
   }
+  if(verlaten) return null;
   // --- 3. nieuwe speler
   const pin = opties.pin || genereerRandomPin();
   const velden = {naam, pin_hash: await maakHash(pin)};
@@ -3223,10 +3315,14 @@ function deelnemerKandidaten(toernooiId){
 function openDeelnemerModal(toernooiId){
   if(!magToernooiBeheren(toernooiId)){ geenRechten(); return; }
   const sup = isSuperAdmin();
+  koppelGeweigerd = new Set();
+  // Toernooi Admin: zodra hij het veld verlaat kijkt de app of die speler al
+  // bestaat (de Super Admin ziet dat al in de lijst terwijl hij typt).
+  const bijVerlaten = veld => sup ? '' : ` onchange="dnBijVerlaten('${toernooiId}','${veld}')"`;
   openModalHtml('moDeelnemer', `
     <h3>Deelnemer toevoegen</h3>
-    <div class="fg"><label>E-mailadres <span class="hint">${sup?'begin te typen':'volledig adres — aanbevolen'}</span></label><input type="email" id="dnEmail" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" oninput="tekenDeelnemerLijst('${toernooiId}')"></div>
-    <div class="fg"><label>Naam <span class="hint">voor- en achternaam</span></label><input type="text" id="dnNaam" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" oninput="tekenDeelnemerLijst('${toernooiId}')"></div>
+    <div class="fg"><label>E-mailadres <span class="hint">${sup?'begin te typen':'volledig adres — aanbevolen'}</span></label><input type="email" id="dnEmail" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" oninput="koppelGeweigerd.clear();tekenDeelnemerLijst('${toernooiId}')"${bijVerlaten('email')}></div>
+    <div class="fg"><label>Naam <span class="hint">voor- en achternaam</span></label><input type="text" id="dnNaam" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" oninput="koppelGeweigerd.clear();tekenDeelnemerLijst('${toernooiId}')"${bijVerlaten('naam')}></div>
     <div id="dnLijstWrap"></div>
     <div class="fg"><label>Exacte handicap <span class="hint">optioneel, alleen voor een nieuwe speler</span></label><input type="number" step="0.1" id="dnHcp"></div>
     <div class="brow"><button class="btn bp bf" onclick="voegSpelerOpNaamToeAanToernooi('${toernooiId}')">Toevoegen</button><button class="btn bg bf" onclick="closeModal('moDeelnemer')">Sluiten</button></div>
@@ -3255,20 +3351,40 @@ function tekenDeelnemerLijst(toernooiId){
   const kop = termen.length ? 'Bestaande spelers die erbij passen' : (sup ? 'Bestaande spelers' : 'Spelers uit je eigen toernooien');
   wrap.innerHTML = `<div class="fg" style="margin-bottom:5px"><label>${kop} <span class="hint">tik om toe te voegen</span></label></div>
     <div class="dn-lijst" id="dnLijst">${lijst.length
-      ? lijst.map(sp=>`<button type="button" class="dn-item" data-id="${sp.id}" onclick="voegDeelnemerToeId('${toernooiId}','${sp.id}')"><span class="dn-n">${esc(sp.naam)}${sup && sp.email?`<span class="dn-e">${esc(sp.email)}</span>`:''}</span><span class="dn-plus">+ toevoegen</span></button>`).join('')
+      ? lijst.map(sp=>`<button type="button" class="dn-item" tabindex="-1" data-id="${sp.id}" onclick="voegDeelnemerToeId('${toernooiId}','${sp.id}')"><span class="dn-n">${esc(sp.naam)}${sup && sp.email?`<span class="dn-e">${esc(sp.email)}</span>`:''}</span><span class="dn-plus">+ toevoegen</span></button>`).join('')
       : `<div class="dn-leeg">${sup?'Geen bestaande speler gevonden — vul e-mailadres en naam in en kies Toevoegen.':'Niemand uit je eigen toernooien — kies Toevoegen om verder te zoeken.'}</div>`}</div>`;
 }
+// Na een koppeling in het venster "Deelnemer toevoegen".
+async function naDeelnemerKoppeling(uit){
+  closeModal('moDeelnemer');
+  await laadAlles(); renderBeheerToernooienPanel();
+  if(uit.soort==='gekoppeld') toast(uit.speler.naam+' is aan '+(isToernooiAdmin()?'je':'het')+' toernooi gekoppeld');
+  else { toast(uit.speler.naam+' is toegevoegd'); toonNieuwePincode(uit.speler.naam, uit.pin); }
+}
+// Toernooi Admin verlaat het naam- of e-mailveld: bestaat die speler al, dan
+// komt de vraag meteen (zie koppelOfMaakSpeler, opties.bijVerlaten).
+async function dnBijVerlaten(toernooiId, veld){
+  const naamVeld = document.getElementById('dnNaam'), emailVeld = document.getElementById('dnEmail');
+  if(koppelBezig || !naamVeld || !emailVeld || !isToernooiAdmin()) return;
+  koppelBezig = true;
+  try{
+    const uit = await koppelOfMaakSpeler(toernooiId, naamVeld.value, {email: veld==='email' ? emailVeld.value : '', bijVerlaten: veld});
+    if(uit) await naDeelnemerKoppeling(uit);
+  }catch(e){ toast('Toevoegen mislukt: '+e.message, true); }
+  finally{ koppelBezig = false; }
+}
 async function voegSpelerOpNaamToeAanToernooi(toernooiId){
+  // Loopt er al een koppeling (vraag bij het verlaten van een veld), of is het
+  // venster daardoor al dicht, dan niet nog een keer.
+  const venster = document.getElementById('moDeelnemer');
+  if(koppelBezig || !venster || !venster.classList.contains('open')) return;
   const naam = document.getElementById('dnNaam').value;
   const emailVeld = document.getElementById('dnEmail');
   const hcpRuw = document.getElementById('dnHcp').value;
   try{
     const uit = await koppelOfMaakSpeler(toernooiId, naam, {hcp: hcpRuw==='' ? null : parseFloat(hcpRuw), email: emailVeld ? emailVeld.value : ''});
     if(!uit) return;
-    closeModal('moDeelnemer');
-    await laadAlles(); renderBeheerToernooienPanel();
-    if(uit.soort==='gekoppeld') toast(uit.speler.naam+' is aan '+(isToernooiAdmin()?'je':'het')+' toernooi gekoppeld');
-    else { toast(uit.speler.naam+' is toegevoegd'); toonNieuwePincode(uit.speler.naam, uit.pin); }
+    await naDeelnemerKoppeling(uit);
   }catch(e){ toast('Toevoegen mislukt: '+e.message, true); }
 }
 async function voegDeelnemerToeId(toernooiId, speler_id){
@@ -3898,20 +4014,25 @@ function renderBeheerSpelersPanel(){
   const spelers = beheerSpelers();
   const mijnIds = ta ? beheerToernooiIds() : null;
   el.innerHTML = `
-  <div class="sh"><div><div class="st">Spelers</div><div class="ss">${spelers.length} spelers${ta?' in jouw toernooien':''}</div></div>
+  <div class="sh"><div><div class="st">Spelers</div><div class="ss">${spelers.length} spelers${ta?' in jouw lijst':''}</div></div>
     <div class="brow">
+      ${ta?'':`<button class="btn bd bsm" id="spVerwijderKnop" style="display:none" onclick="verwijderGekozenSpelers()">Verwijderen</button>`}
       ${ta?'':`<button class="btn bg bsm" onclick="resetAllePincodes()">Alle pincodes op 0000</button>`}
       ${(!ta && ROLLEN_AAN)?`<button class="btn bg bsm" onclick="openSamenvoegModal()">Samenvoegen</button>`:''}
       <button class="btn bp bsm" onclick="openSpelerModal()">+ Speler</button>
     </div>
   </div>
-  ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet alleen de spelers van je eigen toernooien. Van een speler die ook aan toernooien van anderen meedoet ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
-  <div class="tw"><table class="spelerstabel"><thead><tr><th>Naam</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
+  ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet de spelers van je eigen toernooien en de spelers die je zelf hebt toegevoegd. Van een speler die ook bij andere beheerders bekend is ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
+  <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
   ${spelers.map(s=>{
     const toern = allDeelnemers.filter(d=>d.speler_id===s.id && (!mijnIds || mijnIds.has(d.toernooi_id))).map(d=>toernooiById(d.toernooi_id)).filter(Boolean);
     const eigen = !ta || spelerUitsluitendEigen(s.id);
+    // Alleen via zijn eigen spelerslijst zichtbaar (nog in geen van zijn
+    // toernooien, niet door hem aangemaakt): dan kan hij hem er weer af halen.
+    const lijstRij = ta ? mijnLijstRij(s.id) : null;
+    const alleenLijst = !!lijstRij && !toern.length && s.aangemaakt_door!==ingelogdAdmin.id;
     return `<tr>
-    <td><b>${esc(s.naam)}</b>${!eigen?' <span class="sp s-gedeeld" title="Doet ook mee aan toernooien van andere beheerders">gedeeld</span>':''}${(eigen && s.email)?`<div class="rm">${esc(s.email)}</div>`:''}</td>
+    <td>${ta?'':`<div class="sp-naamrij"><input type="checkbox" class="sp-kies" data-id="${s.id}" ${spelerSelectie.has(s.id)?'checked':''} onchange="spelerKies('${s.id}', this.checked)" aria-label="${esc(s.naam)} aanvinken"><div>`}<b>${esc(s.naam)}</b>${!eigen?' <span class="sp s-gedeeld" title="Doet ook mee aan toernooien van andere beheerders">gedeeld</span>':''}${(eigen && s.email)?`<div class="rm">${esc(s.email)}</div>`:''}${ta?'':'</div></div>'}</td>
     <td>${fH(s.exact_hcp)}</td>
     <td>${s.actief!==false?'<span class="sp so">actief</span>':'<span class="sp sg">inactief</span>'}</td>
     <td>${toern.length?`<select style="width:100%">
@@ -3921,12 +4042,107 @@ function renderBeheerSpelersPanel(){
     <td><div class="brow">
       <button class="btn bg bsm" onclick="openSpelerModal('${s.id}')">Bewerken</button>
       ${eigen?`<button class="btn bg bsm" onclick="resetSpelerPin('${s.id}')">Pincode reset</button>`:''}
+      ${alleenLijst?`<button class="btn bg bsm" onclick="haalUitMijnLijst('${s.id}')">Uit mijn lijst</button>`:''}
     </div></td>
   </tr>`;
   }).join('')}
   </tbody></table></div>
   ${(ta && !spelers.length)?'<div class="empty">Nog geen spelers. Voeg ze toe met "+ Speler", of via de deelnemers of de startlijst van je toernooi.</div>':''}
   ${beheerdersKaartHtml()}`;
+  spelerSelectieTonen();
+}
+
+/* ---------- SPELERS AANVINKEN EN VERWIJDEREN (alleen Super Admin, sinds v1.47.0) ----------
+   De Super Admin vinkt een of meer spelers aan en verwijdert ze in één keer.
+   Een speler verwijderen haalt in de database ook al zijn scorekaarten weg.
+   Daarom blijft een speler met uitslagen (een ingevulde scorekaart, een
+   muntjesscore of een gewonnen prijs) altijd staan: uitslagen van gespeelde
+   toernooien mogen niet verdwijnen doordat iemand een speler opruimt. Zo'n
+   speler kan op Inactief, of het toernooi waarin hij speelde gaat eerst weg. */
+let spelerSelectie = new Set();
+let spelersWegIds = [];
+function spelerKies(id, aan){
+  if(aan) spelerSelectie.add(id); else spelerSelectie.delete(id);
+  spelerSelectieTonen();
+}
+function spelerKiesAlles(aan){
+  spelerSelectie = new Set(aan ? allSpelers.map(sp=>sp.id) : []);
+  document.querySelectorAll('#panel-beheer-spelers input.sp-kies').forEach(c=>{ c.checked = aan; });
+  spelerSelectieTonen();
+}
+// Knop "Verwijderen (n)" en het vinkje "alles" gelijk houden aan de keuze.
+function spelerSelectieTonen(){
+  // Spelers die intussen niet meer bestaan tellen niet mee.
+  const bestaat = new Set(allSpelers.map(sp=>sp.id));
+  spelerSelectie.forEach(id=>{ if(!bestaat.has(id)) spelerSelectie.delete(id); });
+  const n = spelerSelectie.size;
+  const knop = document.getElementById('spVerwijderKnop');
+  if(knop){ knop.style.display = n ? '' : 'none'; knop.textContent = 'Verwijderen ('+n+')'; }
+  const alles = document.getElementById('spKiesAlles');
+  if(alles){ alles.checked = n>0 && n===allSpelers.length; alles.indeterminate = n>0 && n<allSpelers.length; }
+}
+async function verwijderGekozenSpelers(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const gekozen = allSpelers.filter(sp=>spelerSelectie.has(sp.id));
+  if(!gekozen.length){ toast('Vink eerst een of meer spelers aan', true); return; }
+  try{
+    // Wie heeft uitslagen? Vers uit de database, in porties van 40.
+    const metUitslag = new Set();
+    const ids = gekozen.map(sp=>sp.id);
+    for(let i=0; i<ids.length; i+=40){
+      const deel = ids.slice(i, i+40).join(',');
+      const kaarten = await sbG('scores','speler_id=in.('+deel+')&select=speler_id,hole_scores') || [];
+      kaarten.forEach(k=>{ if(Array.isArray(k.hole_scores) && k.hole_scores.some(v=>v!=null)) metUitslag.add(k.speler_id); });
+      try{
+        const munt = await sbG('muntjes_scores','speler_id=in.('+deel+')&select=speler_id') || [];
+        munt.forEach(m=>metUitslag.add(m.speler_id));
+      }catch(e){ /* tabel bestaat pas sinds v1.35.0 */ }
+    }
+    allExtraPrijzen.forEach(pr=>{ if(pr.winnaar_speler_id) metUitslag.add(pr.winnaar_speler_id); });
+    const weg = gekozen.filter(sp=>!metUitslag.has(sp.id));
+    const blijven = gekozen.filter(sp=>metUitslag.has(sp.id));
+    spelersWegIds = weg.map(sp=>sp.id);
+    const toernooienVan = sp => allDeelnemers.filter(d=>d.speler_id===sp.id).map(d=>toernooiById(d.toernooi_id)).filter(Boolean).map(t=>t.naam);
+    const regel = sp => { const t = toernooienVan(sp); return `<li>${esc(sp.naam)}${t.length?`<span>${blijven.includes(sp)?'speelde in':'staat ingeschreven voor'} ${esc(t.join(', '))}</span>`:''}</li>`; };
+    openModalHtml('moSpelersWeg', `
+      <h3>Spelers verwijderen</h3>
+      ${weg.length?`<p style="font-size:.84rem;font-family:'Inter',sans-serif;color:var(--td)">${weg.length===1?'Deze speler wordt':'Deze '+weg.length+' spelers worden'} definitief verwijderd, inclusief inschrijvingen, plaatsen op startlijsten en teamindelingen:</p>
+      <ul class="weg-lijst" id="wegLijst">${weg.map(regel).join('')}</ul>`:''}
+      ${blijven.length?`<p style="font-size:.84rem;font-family:'Inter',sans-serif;color:var(--td)">${blijven.length===1?'Deze speler heeft':'Deze '+blijven.length+' spelers hebben'} uitslagen en ${blijven.length===1?'blijft':'blijven'} staan:</p>
+      <ul class="weg-lijst" id="blijfLijst">${blijven.map(regel).join('')}</ul>
+      <p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin:-6px 0 14px">Een speler verwijderen zou ook zijn scorekaarten wissen, en daarmee de uitslag van dat toernooi veranderen. Zet hem op Inactief (Bewerken → Status), of verwijder eerst het toernooi waarin hij speelde.</p>`:''}
+      ${weg.length?`<p style="font-size:.8rem;font-family:'Inter',sans-serif;color:var(--red);font-weight:600;margin-bottom:12px">Dit kan niet ongedaan worden gemaakt.</p>
+      <div class="brow"><button class="btn bd bf" id="wegBevestig" onclick="voerSpelersVerwijderenUit()">${weg.length===1?'1 speler':weg.length+' spelers'} verwijderen</button><button class="btn bg bf" onclick="closeModal('moSpelersWeg')">Annuleren</button></div>`
+      :`<button class="btn bg bf" onclick="closeModal('moSpelersWeg')">Sluiten</button>`}
+    `);
+  }catch(e){ toast('Controleren mislukt: '+e.message, true); }
+}
+async function voerSpelersVerwijderenUit(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const ids = spelersWegIds.slice(); spelersWegIds = [];
+  if(!ids.length) return;
+  const knop = document.getElementById('wegBevestig');
+  if(knop){ knop.disabled = true; knop.textContent = 'Bezig…'; }
+  let ok = 0, fout = 0;
+  for(const id of ids){
+    try{ await sbD('spelers', id); spelerSelectie.delete(id); ok++; }
+    catch(e){ fout++; }
+  }
+  closeModal('moSpelersWeg');
+  spelerSelectie = new Set();   // ook de vinkjes bij wie bleef staan gaan weer uit
+  toast(ok+' speler'+(ok===1?'':'s')+' verwijderd'+(fout?' — '+fout+' mislukt':''), !!fout && !ok);
+  await laadAlles(); renderBeheerSpelersPanel();
+}
+
+// Toernooi Admin haalt een gekoppelde speler weer uit zijn eigen spelerslijst.
+// De speler zelf blijft bestaan; er verandert niets aan zijn gegevens.
+async function haalUitMijnLijst(spelerId){
+  const rij = mijnLijstRij(spelerId);
+  if(!isToernooiAdmin() || !rij){ geenRechten(); return; }
+  const sp = allSpelers.find(x=>x.id===spelerId);
+  if(!confirm((sp?sp.naam:'Deze speler')+' uit je spelerslijst halen? De speler zelf blijft bestaan.')) return;
+  try{ await sbD('admin_spelers', rij.id); toast('Uit je spelerslijst gehaald'); await laadAlles(); renderBeheerSpelersPanel(); }
+  catch(e){ toast('Mislukt: '+e.message, true); }
 }
 
 /* ---------- BEHEERDERS (alleen Super Admin) ---------- */
@@ -3934,9 +4150,12 @@ function beheerdersKaartHtml(){
   if(!isSuperAdmin()) return '';
   if(!ROLLEN_AAN) return `<div class="card" style="margin-top:18px"><div class="cb">
       <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Toernooi Admins en samenvoegen</b>
-      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.44.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
+      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.46.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
     </div></div>`;
-  return `<div class="card" style="margin-top:18px">
+  return `${SPELERSLIJST_AAN?'':`<div class="card" style="margin-top:18px"><div class="cb">
+      <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Eigen spelerslijst voor Toernooi Admins</b>
+      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Voer eenmalig het bestand <b>migratie-1.46.0.sql</b> uit in Supabase (SQL Editor). Daarna kan een Toernooi Admin een bestaande speler aan zijn lijst toevoegen zonder dat hij al een toernooi heeft. Tot dan kan dat alleen via "+ Deelnemer" bij een toernooi.</p>
+    </div></div>`}<div class="card" style="margin-top:18px">
     <div class="ch"><div><div class="ct">Beheerders</div><div class="rm">Een Super Admin mag alles. Een Toernooi Admin beheert alleen zijn eigen en toegewezen toernooien.</div></div>
       <button class="btn bp bsm" style="flex-shrink:0" onclick="openBeheerderModal()">+ Beheerder</button></div>
     <div class="cb" style="padding-top:4px;padding-bottom:4px">
@@ -3968,7 +4187,7 @@ function openBeheerderModal(){
     </select></div>
     <div class="fg"><label>Wachtwoord <span class="hint">min. 8 tekens, letter + cijfer — hij kan het daarna zelf wijzigen</span></label><input type="text" id="bhPwd" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
     <div class="brow"><button class="btn bp bf" onclick="saveBeheerder()">Aanmaken</button><button class="btn bg bf" onclick="closeModal('moBeheerder')">Annuleren</button></div>
-    <p style="font-size:.74rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:10px">Inloggen gaat via de link "Beheerder?" op het inlogscherm, met deze naam en dit wachtwoord. Een beheeraccount staat los van een eventueel spelersaccount met dezelfde naam.</p>
+    <p style="font-size:.74rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:10px">Inloggen gaat via de link "Beheerder" op het inlogscherm, met deze naam en dit wachtwoord. Een beheeraccount staat los van een eventueel spelersaccount met dezelfde naam.</p>
   `);
 }
 async function saveBeheerder(){
@@ -4059,7 +4278,7 @@ async function voerSamenvoegenUit(){
     if(knop) knop.disabled = false;
     const m = String(e.message||'');
     toast(/voeg_spelers_samen|PGRST202|schema cache/i.test(m) && !/scorekaart/i.test(m)
-      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.44.0.sql uit in Supabase.'
+      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.46.0.sql uit in Supabase.'
       : 'Samenvoegen niet uitgevoerd: '+m, true);
   }
 }
@@ -4071,19 +4290,65 @@ function openSpelerModal(id){
   const gedeeld = !!(ta && s && !spelerUitsluitendEigen(s.id));
   const vast = gedeeld ? 'disabled' : '';
   const mijnToern = (ta && !s) ? beheerToernooien() : [];
+  koppelGeweigerd = new Set();
+  // Nieuwe speler: zodra de beheerder het naam- of e-mailveld verlaat kijkt de
+  // app of die speler al bestaat (zie spBijVerlaten).
+  // Typt hij daarna verder in het veld, dan mag de vraag opnieuw komen.
+  const bijVerlaten = veld => s ? '' : `oninput="koppelGeweigerd.clear()" onchange="spBijVerlaten('${veld}')"`;
+  // Toernooi Admin: het toernooi staat bovenaan, zodat de keuze al gemaakt is
+  // voordat de app bij de naam of het adres een bestaande speler herkent.
+  const toernooiKeuze = (ta && !s) ? `<div class="fg"><label>Toernooi <span class="hint">waar deze speler aan meedoet — mag ook later</span></label><select id="spToernooi"><option value="">— nog geen toernooi —</option>${mijnToern.map(t=>`<option value="${t.id}" ${mijnToern.length===1?'selected':''}>${esc(t.naam)}</option>`).join('')}</select></div>` : '';
   openModalHtml('moSpeler', `
     <h3>${s?'Speler bewerken':'Nieuwe speler'}</h3>
     ${gedeeld?`<p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">Deze speler doet ook mee aan toernooien van andere beheerders. Je kunt zijn handicap aanpassen; naam, e-mail, status en pincode wijzigt de Super Admin.</p>`:''}
-    <div class="fg"><label>Naam</label><input type="text" id="spNaam" value="${s?esc(s.naam):''}" ${vast}></div>
-    <div class="fg"><label>E-mail</label><input type="email" id="spEmail" value="${(s&&s.email&&!gedeeld)?esc(s.email):''}" ${vast} ${gedeeld?'placeholder="afgeschermd"':''}></div>
+    ${toernooiKeuze}
+    <div class="fg"><label>Naam</label><input type="text" id="spNaam" value="${s?esc(s.naam):''}" ${vast} ${bijVerlaten('naam')}></div>
+    <div class="fg"><label>E-mail</label><input type="email" id="spEmail" value="${(s&&s.email&&!gedeeld)?esc(s.email):''}" ${vast} ${gedeeld?'placeholder="afgeschermd"':''} ${bijVerlaten('email')}></div>
     <div class="fg"><label>Exacte handicap</label><input type="number" step="0.1" id="spHcp" value="${s?s.exact_hcp:''}"></div>
-    ${(ta && !s)?`<div class="fg"><label>Toernooi <span class="hint">waar deze speler aan meedoet</span></label><select id="spToernooi"><option value="">— nog geen toernooi —</option>${mijnToern.map(t=>`<option value="${t.id}" ${mijnToern.length===1?'selected':''}>${esc(t.naam)}</option>`).join('')}</select></div>`:''}
     ${s?`<div class="fg"><label>Status</label><select id="spActief" ${vast}><option value="1" ${s.actief!==false?'selected':''}>Actief</option><option value="0" ${s.actief===false?'selected':''}>Inactief</option></select></div>`:
       `<div class="fg"><label>Pincode <span class="hint">4 cijfers — speler kan dit later zelf wijzigen via reset</span></label><input type="password" inputmode="numeric" maxlength="4" id="spPin" autocomplete="new-password"></div>`}
     <div class="brow"><button class="btn bp bf" onclick="saveSpeler(${s?`'${s.id}'`:'null'})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moSpeler')">Annuleren</button></div>
   `);
 }
+// Na een koppeling in het venster "Nieuwe speler" (Toernooi Admin).
+async function naSpelerKoppeling(uit){
+  closeModal('moSpeler');
+  toast(uit.soort==='gekoppeld'
+    ? uit.speler.naam+' stond al in Rondje! en is aan '+(uit.inLijst?'je spelerslijst':'je toernooi')+' toegevoegd — zijn eigen handicap en pincode blijven gelden'
+    : 'Speler opgeslagen');
+  await laadAlles(); renderBeheerSpelersPanel();
+}
+// De beheerder verlaat het naam- of e-mailveld van een NIEUWE speler.
+// - Toernooi Admin: bestaat die speler al in Rondje!, dan komt de vraag om hem
+//   te koppelen meteen — aan het gekozen toernooi, of zonder toernooi aan zijn
+//   eigen spelerslijst (zie koppelOfMaakSpeler, opties.bijVerlaten).
+// - Super Admin: die ziet iedereen al; hij krijgt alleen meteen een melding.
+async function spBijVerlaten(veld){
+  const naamVeld = document.getElementById('spNaam'), emailVeld = document.getElementById('spEmail');
+  if(koppelBezig || !naamVeld || !emailVeld) return;
+  if(isSuperAdmin()){
+    if(veld==='naam'){
+      if(naamSleutel(naamVeld.value) && allSpelers.some(x=>naamSleutel(x.naam)===naamSleutel(naamVeld.value))) toast('Er staat al een speler met deze naam in de lijst', true);
+    } else if(emailGeldig(emailVeld.value)){
+      const ander = spelersMetEmail(emailVeld.value);
+      if(ander.length) toast('Dit e-mailadres staat al bij '+ander.map(x=>x.naam).join(' en '), true);
+    }
+    return;
+  }
+  if(!isToernooiAdmin()) return;
+  koppelBezig = true;
+  try{
+    const tEl = document.getElementById('spToernooi');
+    const uit = await koppelOfMaakSpeler(tEl ? (tEl.value||null) : null, naamVeld.value, {email: veld==='email' ? emailVeld.value : '', bijVerlaten: veld});
+    if(uit) await naSpelerKoppeling(uit);
+  }catch(e){ toast('Koppelen mislukt: '+e.message, true); }
+  finally{ koppelBezig = false; }
+}
 async function saveSpeler(id){
+  // Loopt er al een koppeling (vraag bij het verlaten van een veld), of is het
+  // venster daardoor al dicht, dan niet nog een keer opslaan.
+  const venster = document.getElementById('moSpeler');
+  if(koppelBezig || !venster || !venster.classList.contains('open')) return;
   const naam = document.getElementById('spNaam').value.trim();
   const email = document.getElementById('spEmail').value.trim();
   const hcp = parseFloat(document.getElementById('spHcp').value);
@@ -4128,11 +4393,7 @@ async function saveSpeler(id){
         const tEl = document.getElementById('spToernooi');
         const uit = await koppelOfMaakSpeler(tEl ? (tEl.value||null) : null, naam, {hcp, email:email||null, pin});
         if(!uit) return;
-        closeModal('moSpeler');
-        toast(uit.soort==='gekoppeld'
-          ? uit.speler.naam+' stond al in Rondje! en is aan je toernooi gekoppeld — zijn eigen handicap en pincode blijven gelden'
-          : 'Speler opgeslagen');
-        await laadAlles(); renderBeheerSpelersPanel();
+        await naSpelerKoppeling(uit);
         return;
       }
       if(allSpelers.some(x=>naamSleutel(x.naam)===naamSleutel(naam))){ toast('Er staat al een speler met deze naam in de lijst', true); return; }
