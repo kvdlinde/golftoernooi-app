@@ -352,6 +352,12 @@ input.sp-kies,.sp-kiesalles input{width:20px;height:20px;flex-shrink:0;margin:1p
 .bw-item ul{margin:8px 0 0;padding-left:18px;font-size:.84rem;line-height:1.45;color:var(--td)}
 .bw-gebruik{font-size:.74rem;color:var(--tl);margin-top:8px}
 .bw-lijst{max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
+.ph-tabel{width:100%}
+.ph-tabel th:nth-child(2),.ph-tabel td:nth-child(2){text-align:center;width:84px}
+.ph-tabel th:nth-child(3),.ph-tabel td:nth-child(3){text-align:center;width:96px}
+.ph-tabel td.ph-ber{font-weight:700;font-size:1rem}
+input.ph-in{width:72px;padding:9px 6px;text-align:center;border:1.5px solid var(--cd);border-radius:var(--r);background:var(--cr);font-family:'IBM Plex Sans',sans-serif;font-size:1rem;color:var(--td)}
+input.ph-in:focus{outline:none;border-color:var(--gl);background:var(--wh)}
 /* Op desktop breekt de Spelers-tabel uit de smalle (mobiel-georiënteerde) .main-kolom
    zodat de Acties-kolom nooit buiten beeld valt — i.p.v. horizontaal te moeten scrollen. */
 @media (min-width:700px){
@@ -516,7 +522,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.48.0';
+const APP_VERSION = '1.50.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -563,7 +569,7 @@ let ROLLEN_AAN = false;
 // 'admin_spelers'): een bestaande speler die hij aan zijn lijst heeft gekoppeld
 // zonder dat die al aan een van zijn toernooien meedoet. Zo maakt het niet uit
 // of hij eerst zijn spelers of eerst zijn toernooi invoert. Bestaat de tabel
-// nog niet (migratie-1.48.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
+// nog niet (migratie-1.50.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
 // en kan koppelen alleen via een toernooi, zoals in v1.45.0.
 let allAdminSpelers = [];
 let SPELERSLIJST_AAN = false;
@@ -629,7 +635,7 @@ function magTeeBewerken(tee, baan){ return magBaanBewerken(baan) || (isToernooiA
 // bestaande tees wijzigen. Dat werkt door in elk toernooi dat die baan
 // gebruikt, dus elke zo'n wijziging wordt vastgelegd (tabel 'baan_wijzigingen')
 // en de Super Admin krijgt er een melding van zodra hij de app opent. Bestaat
-// die tabel nog niet (migratie-1.48.0.sql niet gedraaid), dan blijft het zoals
+// die tabel nog niet (migratie-1.50.0.sql niet gedraaid), dan blijft het zoals
 // in v1.47: zonder melding geen wijzigingen aan andermans baan.
 // De naam van de baan wijzigen en iets verwijderen blijft voorbehouden aan de
 // Super Admin en aan wie de baan (of tee) zelf heeft ingevoerd.
@@ -783,17 +789,13 @@ async function verifieerHash(pin, opgeslagen){
   return test===hash;
 }
 const ZWAKKE_PINS = new Set(['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999','1234','2345','3456','4567','5678','6789','7890','4321','5432','6543','7654','8765','9876','0987','1212','2121','1010','0101']);
-// Willekeurige 4-cijferige pincode (geen zwakke) — gebruikt bij het automatisch
-// aanmaken van spelersaccounts tijdens een startlijst-import.
-function genereerRandomPin(){
-  let pin;
-  do{
-    const bytes = new Uint8Array(2);
-    crypto.getRandomValues(bytes);
-    pin = String(((bytes[0]<<8)|bytes[1])%10000).padStart(4,'0');
-  } while(ZWAKKE_PINS.has(pin));
-  return pin;
-}
+// STARTPINCODE (sinds v1.49.0)
+// Elke nieuwe speler krijgt pincode 0000, en ook een reset zet de pincode terug
+// op 0000. Wie daarmee inlogt, moet eerst zelf een pincode kiezen voordat hij
+// verder kan (zie openEigenPinModal). De beheerder hoeft zo geen losse pincodes
+// meer rond te sturen: één bericht voor iedereen is genoeg.
+const STANDAARD_PIN = '0000';
+const STANDAARD_PIN_UITLEG = 'Hij logt de eerste keer in met pincode '+STANDAARD_PIN+' en kiest dan zelf een pincode.';
 
 /* ---------- SUPABASE REST HELPERS ---------- */
 async function sbFetch(path, opts={}){
@@ -1148,6 +1150,11 @@ create table if not exists baan_wijzigingen (
 alter table baan_wijzigingen enable row level security;
 drop policy if exists "allow all" on baan_wijzigingen; create policy "allow all" on baan_wijzigingen for all using (true);
 
+-- 2d. Handmatige playing handicap (sinds v1.50.0): staat hier een getal, dan
+--     rekent de app voor die speler in die ronde met dit getal in plaats van
+--     de playing handicap zelf uit te rekenen. Leeg = de app rekent zelf.
+alter table scores add column if not exists ph_handmatig int;
+
 -- 3. Wie iets heeft aangemaakt. Leeg bij alles wat al bestond (= van de Super Admin).
 --    Bepaalt wat een Toernooi Admin mag bewerken of verwijderen.
 alter table toernooien add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
@@ -1468,17 +1475,22 @@ async function laadRollen(){
   }
   // Een rol die de Super Admin intussen heeft gewijzigd geldt meteen.
   if(ingelogdAdmin){ const vers = allAdmins.find(a=>a.id===ingelogdAdmin.id); if(vers) ingelogdAdmin = vers; }
-  // Eigen spelerslijsten van Toernooi Admins (migratie-1.48.0.sql).
+  // Eigen spelerslijsten van Toernooi Admins (migratie-1.50.0.sql).
   if(ROLLEN_AAN){
     try{ allAdminSpelers = await sbG('admin_spelers','') || []; SPELERSLIJST_AAN = true; }
     catch(e){ allAdminSpelers = []; SPELERSLIJST_AAN = false; }
   } else { allAdminSpelers = []; SPELERSLIJST_AAN = false; }
   // Wijzigingen van Toernooi Admins aan banen van anderen die de Super Admin
-  // nog niet heeft gezien (migratie-1.48.0.sql).
+  // nog niet heeft gezien (migratie-1.50.0.sql).
   if(ROLLEN_AAN){
     try{ allBaanWijzigingen = await sbG('baan_wijzigingen','gezien_op=is.null&order=created_at.desc') || []; BAANLOG_AAN = true; }
     catch(e){ allBaanWijzigingen = []; BAANLOG_AAN = false; }
   } else { allBaanWijzigingen = []; BAANLOG_AAN = false; }
+  // Handmatige playing handicap per kaart (kolom scores.ph_handmatig,
+  // migratie-1.50.0.sql). Bestaat de kolom niet, dan mislukt deze proef en
+  // blijft de knop "Handicaps" een uitleg tonen.
+  try{ await sbG('scores','select=ph_handmatig&limit=1'); PH_HANDMATIG_AAN = true; }
+  catch(e){ PH_HANDMATIG_AAN = false; }
 }
 async function laadAlles(){
   await laadRollen();
@@ -1707,7 +1719,7 @@ async function scVerversOpenKaart(){
     const ids = ctx.kolomSpelers.join(',');
     const [log, scores] = await Promise.all([
       sbG('score_holes_log','ronde_id=eq.'+ctx.rondeId+'&speler_id=in.('+ids+')'),
-      ctx.kolomSpelers.length>1 ? sbG('scores','ronde_id=eq.'+ctx.rondeId+'&speler_id=in.('+ids+')') : Promise.resolve(null)
+(ctx.kolomSpelers.length>1 || PH_HANDMATIG_AAN) ? sbG('scores','ronde_id=eq.'+ctx.rondeId+'&speler_id=in.('+ids+')') : Promise.resolve(null)
     ]);
     if(window._scCtx!==ctx || !modalEl.classList.contains('open')) return;
     if((ctx._versie||0)!==versie || (ctx._schrijf||0)>0){ scPlanVervers(1500); return; }
@@ -1719,6 +1731,17 @@ async function scVerversOpenKaart(){
     // Tee/handicap van medespelers (voor hun punten en subtotalen): de eigen
     // rij blijft zoals dit toestel hem bijhoudt.
     if(scores) ctx.kolomScores = (ctx.kolomScores||[]).filter(sc=>sc.speler_id===ctx.spelerId).concat(scores.filter(sc=>sc.speler_id!==ctx.spelerId));
+    // Heeft de beheerder intussen de playing handicap van DEZE kaart handmatig
+    // ingesteld, gewijzigd of weggehaald? Dan rekent de kaart daar meteen mee.
+    if(scores && PH_HANDMATIG_AAN){
+      const vers = scores.find(sc=>sc.speler_id===ctx.spelerId);
+      if(vers && kaartPhHandmatig(vers)!==kaartPhHandmatig(ctx.existingScore)){
+        let eigen = (ctx.kolomScores||[]).find(sc=>sc.speler_id===ctx.spelerId);
+        if(eigen) eigen.ph_handmatig = vers.ph_handmatig; else { eigen = vers; ctx.kolomScores.push(eigen); }
+        ctx.existingScore = eigen;
+        if(document.getElementById('scTee')) onTeeChange();
+      }
+    }
     scGridBijwerkenNaVerversen(ctx);
   }catch(e){ /* geen bereik: de volgende poging haalt het in */ }
   finally{ scVerversBezig = false; }
@@ -1858,18 +1881,59 @@ async function doSpelerLogin(){
     const rec = rows && rows[0];
     if(!rec || rec.actief===false || !(await verifieerHash(pin, rec.pin_hash))){ toast('Naam of pincode onjuist', true); return; }
     delete rec.pin_hash;
-    // Je kunt niet tegelijk als speler én als admin ingelogd zijn — inloggen
-    // als speler beëindigt automatisch een eventuele actieve adminsessie.
-    const welAdminActief = !!ingelogdAdmin;
-    ingelogdAdmin = null;
-    localStorage.removeItem('admin_naam');
-    ingelogdSpeler = rec;
-    localStorage.setItem('speler_id', rec.id);
-    localStorage.setItem('laatste_login', rec.id);
-    localStorage.setItem('laatste_login_naam', rec.naam);
-    toast(welAdminActief ? 'Welkom, '+rec.naam+'! (je bent uitgelogd als admin)' : 'Welkom, '+rec.naam+'!');
-    await boot();
+    // Ingelogd met de startpincode: eerst een eigen pincode kiezen. Tot dat is
+    // gebeurd is de speler nog niet ingelogd.
+    if(pin===STANDAARD_PIN){ openEigenPinModal(rec); return; }
+    await voltooiSpelerLogin(rec);
   }catch(e){ toast('Inloggen mislukt: '+e.message, true); }
+}
+async function voltooiSpelerLogin(rec){
+  // Je kunt niet tegelijk als speler én als admin ingelogd zijn — inloggen
+  // als speler beëindigt automatisch een eventuele actieve adminsessie.
+  const welAdminActief = !!ingelogdAdmin;
+  ingelogdAdmin = null;
+  localStorage.removeItem('admin_naam');
+  ingelogdSpeler = rec;
+  localStorage.setItem('speler_id', rec.id);
+  localStorage.setItem('laatste_login', rec.id);
+  localStorage.setItem('laatste_login_naam', rec.naam);
+  toast(welAdminActief ? 'Welkom, '+rec.naam+'! (je bent uitgelogd als admin)' : 'Welkom, '+rec.naam+'!');
+  await boot();
+}
+// Eerste inlog (of na een reset): de speler kiest zelf een pincode.
+let eigenPinSpeler = null;
+function openEigenPinModal(rec){
+  eigenPinSpeler = rec;
+  openModalHtml('moEigenPin', `
+    <h3>Kies je eigen pincode</h3>
+    <p style="font-size:.86rem;color:var(--tm);font-family:'Inter',sans-serif;margin-bottom:12px">Welkom, ${esc(rec.naam)}! Je hebt ingelogd met de startpincode ${STANDAARD_PIN}. Kies nu je eigen pincode van vier cijfers. Die gebruik je vanaf nu om in te loggen.</p>
+    <form id="eigenPinForm" onsubmit="event.preventDefault(); slaEigenPinOp(); return false;">
+    <input type="text" name="username" autocomplete="username" value="${esc(rec.naam)}" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;pointer-events:none">
+    <div class="fg"><label>Nieuwe pincode <span class="hint">4 cijfers</span></label><input type="password" name="password" inputmode="numeric" maxlength="4" id="eigenPin1" autocomplete="new-password"></div>
+    <div class="fg"><label>Nog een keer <span class="hint">dezelfde 4 cijfers</span></label><input type="password" inputmode="numeric" maxlength="4" id="eigenPin2" autocomplete="new-password"></div>
+    <button type="submit" class="btn bp bf" id="eigenPinKnop">Opslaan en verder</button>
+    </form>
+  `);
+  const eerste = document.getElementById('eigenPin1'); if(eerste) eerste.focus();
+}
+async function slaEigenPinOp(){
+  const rec = eigenPinSpeler;
+  if(!rec) return;
+  const pin = document.getElementById('eigenPin1').value.trim();
+  const nogEens = document.getElementById('eigenPin2').value.trim();
+  if(!/^\d{4}$/.test(pin)){ toast('Je pincode moet uit 4 cijfers bestaan', true); return; }
+  if(pin===STANDAARD_PIN){ toast('Kies een andere pincode dan '+STANDAARD_PIN, true); return; }
+  if(ZWAKKE_PINS.has(pin)){ toast('Deze pincode is te makkelijk te raden — kies een andere', true); return; }
+  if(pin!==nogEens){ toast('De twee pincodes zijn niet hetzelfde', true); return; }
+  const knop = document.getElementById('eigenPinKnop');
+  if(knop) knop.disabled = true;
+  try{
+    await sbPa('spelers', rec.id, {pin_hash: await maakHash(pin)});
+    eigenPinSpeler = null;
+    closeModal('moEigenPin');
+    await voltooiSpelerLogin(rec);
+    toast('Je pincode is opgeslagen');
+  }catch(e){ if(knop) knop.disabled = false; toast('Opslaan mislukt: '+e.message, true); }
 }
 function logoutSpeler(){
   ingelogdSpeler = null;
@@ -2003,8 +2067,8 @@ function renderBanenPanel(){
   </div>
   ${(isSuperAdmin() && ROLLEN_AAN && allBaanWijzigingen.length)?`<div class="db-melding" id="baanMeldingBalk"><b>${allBaanWijzigingen.length===1?'1 wijziging':allBaanWijzigingen.length+' wijzigingen'} door een Toernooi Admin</b>Een Toernooi Admin heeft iets aangepast aan een baan die hij niet zelf heeft ingevoerd.<br><button class="btn bg bsm" onclick="openBaanMeldingen()">Bekijken</button></div>`:''}
   ${(ROLLEN_AAN && !BAANLOG_AAN)?`<div class="db-melding" id="baanDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
-    ? 'Voer <b>migratie-1.48.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
-    : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.48.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
+    ? 'Voer <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
+    : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.50.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
   <div id="banenLijst"></div>`;
   const lijst = document.getElementById('banenLijst');
   if(!allBanen.length){ lijst.innerHTML = '<div class="empty">Nog geen banen toegevoegd.</div>'; return; }
@@ -2477,6 +2541,18 @@ async function baanMeldingenGezien(){
 // scores-rij — zo is er nooit een verzoek nodig dat op een ontbrekende kolom
 // kan stuklopen.
 function scoreKentHcpVast(score){ return !!score && Object.prototype.hasOwnProperty.call(score, 'hcp_vast'); }
+/* ---------- PLAYING HANDICAP HANDMATIG (sinds v1.50.0) ----------
+   Standaard rekent de app de playing handicap van een kaart zelf uit (exacte
+   handicap, tee en allowance). De beheerder kan dat per ronde en per speler
+   overrulen met een eigen getal: scores.ph_handmatig. Staat daar iets in, dan
+   rekent ALLES met dat getal — de scorekaart van de speler, de punten, het
+   herberekenen bij het sluiten van de ronde — ongeacht tee, allowance of een
+   latere wijziging van de exacte handicap. Leeg (null) = de app rekent zelf.
+   Instellen gaat per ronde, met de knop "Handicaps" (openHandicapsModal). */
+let PH_HANDMATIG_AAN = false;
+function kaartPhHandmatig(score){
+  return (score && score.ph_handmatig!=null && !isNaN(Number(score.ph_handmatig))) ? Number(score.ph_handmatig) : null;
+}
 // Met welke handicap rekent deze kaart? Geeft {pH, exact, vast}:
 // - niet vast            → de actuele exacte handicap van de speler;
 // - vast, exact bekend   → die vastgelegde exacte handicap (tee- of
@@ -2485,6 +2561,9 @@ function scoreKentHcpVast(score){ return !!score && Object.prototype.hasOwnPrope
 //                          bij de migratie: de bewaarde playing handicap
 //                          blijft staan zolang de tee dezelfde is.
 function kaartHcp(score, speler, tee, allowancePct){
+  // Handmatig ingesteld door de beheerder: dat getal geldt, wat er verder ook is.
+  const handmatig = kaartPhHandmatig(score);
+  if(handmatig!=null) return { pH: handmatig, exact: score.exact_hcp!=null ? Number(score.exact_hcp) : speler.exact_hcp, vast: true, handmatig: true };
   const actueel = { pH: tee ? playingHandicap(speler.exact_hcp, tee, allowancePct) : null, exact: speler.exact_hcp, vast: false };
   if(!score || score.hcp_vast!==true) return actueel;
   if(score.exact_hcp!=null){
@@ -2623,6 +2702,7 @@ function renderBeheerToernooienPanel(){
           ${gesloten ? '' : `<div class="ra">
             <button class="btn bpu bsm" onclick="openStartlijstModal('${r.id}')">Startlijst</button>
             <button class="btn bbl bsm" onclick="openInvoerstatusModal('${r.id}')">Score invoeren</button>
+            <button class="btn bg bsm" onclick="openHandicapsModal('${r.id}')">Handicaps</button>
             <button class="btn bpu bsm" onclick="openExtraPrijzenModal('${r.id}')">Funnies${extraPrijzenVoorRonde(r.id).length?` (${extraPrijzenVoorRonde(r.id).length})`:''}</button>
             ${teams.length?`<button class="btn bpu bsm" onclick="openTeamRondeModal('${r.id}')">Teams (ronde)</button>`:''}
             <button class="btn bg bsm" onclick="openRondeModal('${t.id}','${r.id}')">Bewerken</button>
@@ -3369,6 +3449,115 @@ async function herberekenRondeScores(rondeId){
   }
   return aangepast;
 }
+// VENSTER "PLAYING HANDICAPS" PER RONDE (sinds v1.50.0)
+// Per deelnemer: wat de app zelf rekent, en een vak om dat te overrulen. Een
+// leeg vak = de app rekent zelf. Zie PLAYING HANDICAP HANDMATIG bij kaartHcp.
+async function openHandicapsModal(rondeId){
+  const ronde = rondeById(rondeId);
+  if(!ronde || !magToernooiBeheren(ronde.toernooi_id)){ geenRechten(); return; }
+  openModalHtml('moHandicaps', `<h3>Playing handicaps — ${esc(ronde.naam)}</h3><div id="phBody"><div class="empty">Laden…</div></div>`);
+  await renderHandicapsBody(rondeId);
+}
+async function renderHandicapsBody(rondeId){
+  const body = document.getElementById('phBody');
+  if(!body) return;
+  const ronde = rondeById(rondeId);
+  const toernooi = toernooiById(ronde.toernooi_id);
+  const comb = combinatieById(ronde.combinatie_id);
+  if(!PH_HANDMATIG_AAN){
+    body.innerHTML = `<div class="db-melding" id="phDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
+      ? 'Voer <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Daarna kun je hier playing handicaps handmatig instellen.'
+      : 'Playing handicaps handmatig instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.50.0.sql</b> uit te voeren in Supabase.'}</div>
+      <button class="btn bg bf" onclick="closeModal('moHandicaps')">Sluiten</button>`;
+    return;
+  }
+  let scores = [];
+  try{ scores = await sbG('scores','ronde_id=eq.'+rondeId) || []; }
+  catch(e){ body.innerHTML = `<div class="empty">Laden mislukt: ${esc(e.message)}</div>`; return; }
+  const tees = comb ? allTees.filter(t=>t.combinatie_id===comb.id) : [];
+  const spelers = allDeelnemers.filter(d=>d.toernooi_id===ronde.toernooi_id).map(d=>allSpelers.find(sp=>sp.id===d.speler_id)).filter(Boolean).sort((a,b)=>a.naam.localeCompare(b.naam));
+  window._phCtx = {rondeId, scores, spelers: spelers.map(sp=>sp.id)};
+  const gesloten = ronde.status==='gesloten';
+  const rijen = spelers.map(sp=>{
+    const sc = scores.find(x=>x.speler_id===sp.id) || null;
+    // De tee van zijn kaart; heeft hij nog niet gekozen en is er maar één tee,
+    // dan die. Anders valt er nog niets uit te rekenen.
+    const tee = (sc && sc.tee_id) ? teeById(sc.tee_id) : (tees.length===1 ? tees[0] : null);
+    const berekend = tee ? kaartHcp(sc ? {...sc, ph_handmatig:null} : null, sp, tee, toernooi.allowance_pct).pH : null;
+    const hand = kaartPhHandmatig(sc);
+    return `<tr data-id="${sp.id}">
+      <td><b>${esc(sp.naam)}</b><div class="rm">hcp ${fH(sp.exact_hcp)}${tee?' · tee '+esc(tee.kleur):''}</div></td>
+      <td class="ph-ber">${berekend!=null ? fPH(berekend) : '<span class="rm">na teekeuze</span>'}</td>
+      <td><input type="number" step="1" inputmode="numeric" class="ph-in" id="ph_${sp.id}" value="${hand!=null?hand:''}" placeholder="—" ${gesloten?'disabled':''} aria-label="Handmatige playing handicap voor ${esc(sp.naam)}"></td>
+    </tr>`;
+  }).join('');
+  const aantal = scores.filter(x=>kaartPhHandmatig(x)!=null).length;
+  body.innerHTML = `
+    <p style="font-size:.82rem;color:var(--tm);font-family:'Inter',sans-serif;margin-bottom:10px">De app rekent de playing handicap zelf uit. Wil je voor deze ronde een ander getal gebruiken? Vul dat dan in onder <b>Handmatig</b>. Laat het vak leeg om de app te laten rekenen.</p>
+    ${spelers.length ? `<div class="tw"><table class="ph-tabel"><thead><tr><th>Speler</th><th>Berekend</th><th>Handmatig</th></tr></thead><tbody>${rijen}</tbody></table></div>` : '<div class="empty">Nog geen deelnemers in dit toernooi.</div>'}
+    <p class="rm" id="phStand" style="margin:8px 0 12px">${aantal ? (aantal===1?'1 speler heeft':aantal+' spelers hebben')+' nu een handmatige playing handicap.' : 'Niemand heeft nu een handmatige playing handicap.'} Een plus-handicap vul je in met een min ervoor, bijvoorbeeld -2.</p>
+    ${gesloten ? `<p class="rm" style="margin-bottom:12px">Deze ronde is gesloten. Heropen de ronde om handicaps aan te passen.</p>` : ''}
+    <div class="brow">${(spelers.length && !gesloten)?`<button class="btn bp bf" id="phOpslaan" onclick="saveHandicaps('${rondeId}')">Opslaan</button>`:''}<button class="btn bg bf" onclick="closeModal('moHandicaps')">Sluiten</button></div>`;
+}
+async function saveHandicaps(rondeId){
+  const ronde = rondeById(rondeId);
+  const ctx = window._phCtx;
+  if(!ronde || !magToernooiBeheren(ronde.toernooi_id)){ geenRechten(); return; }
+  if(!PH_HANDMATIG_AAN || !ctx || ctx.rondeId!==rondeId) return;
+  if(ronde.status==='gesloten'){ toast('Deze ronde is gesloten — heropen hem eerst', true); return; }
+  const toernooi = toernooiById(ronde.toernooi_id);
+  const holes = combinatieHoles(combinatieById(ronde.combinatie_id));
+  // Eerst alles controleren, dan pas opslaan.
+  const wijzigingen = [];
+  for(const id of ctx.spelers){
+    const veld = document.getElementById('ph_'+id);
+    if(!veld) continue;
+    const ruw = String(veld.value).trim();
+    let waarde = null;
+    if(ruw!==''){
+      waarde = Number(ruw);
+      if(!Number.isInteger(waarde) || waarde<-10 || waarde>72){
+        const sp = allSpelers.find(x=>x.id===id);
+        toast('De playing handicap van '+(sp?sp.naam:'een speler')+' klopt niet. Vul een heel getal in tussen -10 en 72, of laat het vak leeg.', true);
+        veld.focus(); return;
+      }
+    }
+    const sc = ctx.scores.find(x=>x.speler_id===id) || null;
+    if(waarde===kaartPhHandmatig(sc)) continue;
+    wijzigingen.push({id, sc, waarde});
+  }
+  if(!wijzigingen.length){ toast('Er is niets gewijzigd'); return; }
+  const knop = document.getElementById('phOpslaan');
+  if(knop){ knop.disabled = true; knop.textContent = 'Bezig…'; }
+  let ok = 0, fout = 0;
+  for(const w of wijzigingen){
+    try{
+      const sp = allSpelers.find(x=>x.id===w.id);
+      const nu = new Date().toISOString();
+      if(w.sc){
+        // Bestaande kaart: handicap zetten (of weghalen) en de kaart meteen
+        // opnieuw doorrekenen met de handicap die daarna geldt.
+        const tee = w.sc.tee_id ? teeById(w.sc.tee_id) : null;
+        const pH = kaartHcp({...w.sc, ph_handmatig: w.waarde}, sp, tee, toernooi.allowance_pct).pH;
+        const velden = {ph_handmatig: w.waarde, playing_hcp: pH, updated_at: nu};
+        if(Array.isArray(w.sc.hole_scores) && holes){
+          const u = scOfficieleUitkomst(w.sc.hole_scores, holes, pH);
+          Object.assign(velden, {bruto: u.bruto, netto: u.netto, stableford: u.stableford,
+            birdies_netto: u.birdies_netto, eagles_netto: u.eagles_netto, birdies_bruto: u.birdies_bruto, eagles_bruto: u.eagles_bruto});
+        }
+        await sbPa('scores', w.sc.id, velden);
+      } else {
+        // Nog geen kaart: een lege kaart aanmaken die de handicap al draagt.
+        // De speler kiest later gewoon zijn tee en vult zijn score in.
+        await sbP('scores', {ronde_id: rondeId, speler_id: w.id, tee_id: null, hole_scores: Array(18).fill(null),
+          playing_hcp: w.waarde, ph_handmatig: w.waarde, ingevoerd_door: 'admin', updated_at: nu});
+      }
+      ok++;
+    }catch(e){ fout++; }
+  }
+  toast(fout ? (ok+' opgeslagen, '+fout+' mislukt — probeer het opnieuw') : (ok===1 ? 'Playing handicap opgeslagen' : ok+' playing handicaps opgeslagen'), !!fout);
+  await renderHandicapsBody(rondeId);
+}
 async function sluitRonde(id){
   // Muntjes Spel: na het sluiten kunnen spelers hun muntjestotaal niet meer
   // zelf invullen — waarschuw dus vooraf wie het nog niet gedaan heeft.
@@ -3428,10 +3617,10 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   const naarLijst = !toernooiId;
   const kanKoppelen = !!toernooiId || (isToernooiAdmin() && SPELERSLIJST_AAN);
   // Koppelen zonder toernooi kan pas als de tabel voor de eigen spelerslijst
-  // bestaat (migratie-1.48.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
+  // bestaat (migratie-1.50.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
   // al bij het verlaten van het veld, anders lijkt het alsof er niets gebeurt.
   const kanNietKoppelen = wat => {
-    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.48.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
+    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.50.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
     return null;
   };
   const bekend = sp => beheerSpelers().some(x=>x.id===sp.id);
@@ -3509,8 +3698,7 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   }
   if(verlaten) return null;
   // --- 3. nieuwe speler
-  const pin = opties.pin || genereerRandomPin();
-  const velden = {naam, pin_hash: await maakHash(pin)};
+  const velden = {naam, pin_hash: await maakHash(STANDAARD_PIN)};
   if(email) velden.email = email;
   if(opties.hcp!=null && !isNaN(opties.hcp)){ velden.exact_hcp = opties.hcp; velden.hcp_bevestigd = true; }
   const rijen = await sbP('spelers', metMaker(velden));
@@ -3520,16 +3708,7 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
     const d = await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id:speler.id, status:'uitgenodigd'});
     if(d && d[0]) allDeelnemers.push(d[0]);
   }
-  return {soort:'nieuw', speler, pin, pinZelfGekozen: !!opties.pin};
-}
-// Laat na het aanmaken van een speler zijn (willekeurige) pincode zien.
-function toonNieuwePincode(naam, pin){
-  openModalHtml('moNieuwePincodes', `<h3>Nieuwe speler</h3>
-    <p style="font-size:.82rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Geef deze pincode door aan de speler. Hij logt in met zijn naam zoals die hieronder staat (hoofdletters maken niet uit) en kan de pincode daarna zelf wijzigen via Profiel.</p>
-    <div class="tw"><table><thead><tr><th>Naam</th><th>Pincode</th></tr></thead><tbody>
-    <tr><td>${esc(naam)}</td><td><b>${esc(pin)}</b></td></tr>
-    </tbody></table></div>
-    <button class="btn bp bf" style="margin-top:12px" onclick="closeModal('moNieuwePincodes')">Sluiten</button>`);
+  return {soort:'nieuw', speler};
 }
 // DEELNEMER TOEVOEGEN (sinds v1.45.0 één venster voor beide rollen)
 // Bovenaan e-mailadres en naam; daaronder de bestaande spelers die erbij
@@ -3559,8 +3738,8 @@ function openDeelnemerModal(toernooiId){
     <div class="fg"><label>Exacte handicap <span class="hint">optioneel, alleen voor een nieuwe speler</span></label><input type="number" step="0.1" id="dnHcp"></div>
     <div class="brow"><button class="btn bp bf" onclick="voegSpelerOpNaamToeAanToernooi('${toernooiId}')">Toevoegen</button><button class="btn bg bf" onclick="closeModal('moDeelnemer')">Sluiten</button></div>
     <p style="font-size:.74rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:10px">${sup
-      ? 'Tik een speler in de lijst aan om hem toe te voegen. Staat hij er niet bij, vul dan e-mailadres en naam in en kies Toevoegen: hij wordt nieuw aangemaakt en je krijgt zijn pincode te zien.'
-      : 'Vul het e-mailadres in als je het hebt. Staat deze speler al in Rondje! (bijvoorbeeld van een eerder toernooi), dan vraagt de app of je hem wilt koppelen. Anders wordt hij nieuw aangemaakt en krijg je zijn pincode te zien.'}</p>
+      ? 'Tik een speler in de lijst aan om hem toe te voegen. Staat hij er niet bij, vul dan e-mailadres en naam in en kies Toevoegen: hij wordt nieuw aangemaakt. Een nieuwe speler logt de eerste keer in met pincode '+STANDAARD_PIN+' en kiest dan zelf een pincode.'
+      : 'Vul het e-mailadres in als je het hebt. Staat deze speler al in Rondje! (bijvoorbeeld van een eerder toernooi), dan vraagt de app of je hem wilt koppelen. Anders wordt hij nieuw aangemaakt. Een nieuwe speler logt de eerste keer in met pincode '+STANDAARD_PIN+' en kiest dan zelf een pincode.'}</p>
   `);
   tekenDeelnemerLijst(toernooiId);
 }
@@ -3591,7 +3770,7 @@ async function naDeelnemerKoppeling(uit){
   closeModal('moDeelnemer');
   await laadAlles(); renderBeheerToernooienPanel();
   if(uit.soort==='gekoppeld') toast(uit.speler.naam+' is aan '+(isToernooiAdmin()?'je':'het')+' toernooi gekoppeld');
-  else { toast(uit.speler.naam+' is toegevoegd'); toonNieuwePincode(uit.speler.naam, uit.pin); }
+  else toast(uit.speler.naam+' is toegevoegd. '+STANDAARD_PIN_UITLEG);
 }
 // Toernooi Admin verlaat het naam- of e-mailveld: bestaat die speler al, dan
 // komt de vraag meteen (zie koppelOfMaakSpeler, opties.bijVerlaten).
@@ -3721,7 +3900,7 @@ Naam 4
 Naam 5
 Naam 6"></textarea>
         <button class="btn bp bsm" style="margin-top:6px" onclick="importeerStartlijst()" type="button">Importeren</button>
-        <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Namen die nog geen account hebben worden automatisch aangemaakt (met een willekeurige pincode, die je na het importeren te zien krijgt) en meteen als deelnemer aan dit toernooi gekoppeld.</p>
+        <p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Namen die nog geen account hebben worden automatisch aangemaakt en meteen als deelnemer aan dit toernooi gekoppeld. Een nieuwe speler logt de eerste keer in met pincode 0000 en kiest dan zelf een pincode.</p>
       </div>
     </div></div>
   `;
@@ -4201,12 +4380,11 @@ async function importeerStartlijst(){
         if(!naam) continue;
         let speler = allSpelers.find(s=>s.naam.toLowerCase()===naam.toLowerCase());
         if(!speler){
-          const pin = genereerRandomPin();
-          const hash = await maakHash(pin);
+          const hash = await maakHash(STANDAARD_PIN);
           const rows = await sbP('spelers', metMaker({naam, pin_hash:hash}));
           speler = rows[0];
           allSpelers.push(speler);
-          nieuweSpelers.push({naam, pin});
+          nieuweSpelers.push({naam});
         } else {
           gekoppeldeSpelers++;
         }
@@ -4228,12 +4406,10 @@ async function importeerStartlijst(){
   toast(blocks.length+' flight(s) verwerkt · '+gekoppeldeSpelers+' bestaande speler(s) gekoppeld · '+nieuweSpelers.length+' nieuwe account(s)');
 
   if(nieuweSpelers.length){
-    openModalHtml('moNieuwePincodes', `<h3>${nieuweSpelers.length} nieuwe spelersaccounts</h3>
-      <p style="font-size:.82rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Deel deze pincodes met de betreffende spelers zodat ze kunnen inloggen (ze kunnen 'm daarna zelf wijzigen via Profiel).</p>
-      <div class="tw"><table><thead><tr><th>Naam</th><th>Pincode</th></tr></thead><tbody>
-      ${nieuweSpelers.map(n=>`<tr><td>${esc(n.naam)}</td><td><b>${n.pin}</b></td></tr>`).join('')}
-      </tbody></table></div>
-      <button class="btn bp bf" style="margin-top:12px" onclick="closeModal('moNieuwePincodes')">Sluiten</button>`);
+    openModalHtml('moNieuweSpelers', `<h3>${nieuweSpelers.length===1?'1 nieuwe speler':nieuweSpelers.length+' nieuwe spelers'}</h3>
+      <p style="font-size:.84rem;color:var(--tm);font-family:'Inter',sans-serif;margin-bottom:10px">Deze spelers stonden nog niet in Rondje! en zijn aangemaakt. Ze loggen de eerste keer in met hun naam en pincode <b>${STANDAARD_PIN}</b>, en kiezen dan zelf een pincode.</p>
+      <ul class="weg-lijst" id="nieuweSpelersLijst">${nieuweSpelers.map(n=>`<li>${esc(n.naam)}</li>`).join('')}</ul>
+      <button class="btn bp bf" onclick="closeModal('moNieuweSpelers')">Sluiten</button>`);
   }
 }
 
@@ -4255,8 +4431,8 @@ function renderBeheerSpelersPanel(){
     </div>
   </div>
   ${(ROLLEN_AAN && !SPELERSLIJST_AAN)?`<div class="db-melding" id="dbMelding"><b>Database nog niet bijgewerkt</b>${ta
-      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.48.0.sql</b> uit te voeren in Supabase.'
-      : 'Voer <b>migratie-1.48.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
+      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.50.0.sql</b> uit te voeren in Supabase.'
+      : 'Voer <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
   ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet de spelers van je eigen toernooien en de spelers die je zelf hebt toegevoegd. Van een speler die ook bij andere beheerders bekend is ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
   <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
   ${spelers.map(s=>{
@@ -4385,7 +4561,7 @@ function beheerdersKaartHtml(){
   if(!isSuperAdmin()) return '';
   if(!ROLLEN_AAN) return `<div class="card" style="margin-top:18px"><div class="cb">
       <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Toernooi Admins en samenvoegen</b>
-      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.48.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
+      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
     </div></div>`;
   return `<div class="card" style="margin-top:18px">
     <div class="ch"><div><div class="ct">Beheerders</div><div class="rm">Een Super Admin mag alles. Een Toernooi Admin beheert alleen zijn eigen en toegewezen toernooien.</div></div>
@@ -4510,7 +4686,7 @@ async function voerSamenvoegenUit(){
     if(knop) knop.disabled = false;
     const m = String(e.message||'');
     toast(/voeg_spelers_samen|PGRST202|schema cache/i.test(m) && !/scorekaart/i.test(m)
-      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.48.0.sql uit in Supabase.'
+      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.50.0.sql uit in Supabase.'
       : 'Samenvoegen niet uitgevoerd: '+m, true);
   }
 }
@@ -4538,7 +4714,7 @@ function openSpelerModal(id){
     <div class="fg"><label>E-mail</label><input type="email" id="spEmail" value="${(s&&s.email&&!gedeeld)?esc(s.email):''}" ${vast} ${gedeeld?'placeholder="afgeschermd"':''} ${bijVerlaten('email')}></div>
     <div class="fg"><label>Exacte handicap</label><input type="number" step="0.1" id="spHcp" value="${s?s.exact_hcp:''}"></div>
     ${s?`<div class="fg"><label>Status</label><select id="spActief" ${vast}><option value="1" ${s.actief!==false?'selected':''}>Actief</option><option value="0" ${s.actief===false?'selected':''}>Inactief</option></select></div>`:
-      `<div class="fg"><label>Pincode <span class="hint">4 cijfers — speler kan dit later zelf wijzigen via reset</span></label><input type="password" inputmode="numeric" maxlength="4" id="spPin" autocomplete="new-password"></div>`}
+      `<p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px" id="spPinUitleg">Pincode: een nieuwe speler logt de eerste keer in met ${STANDAARD_PIN} en kiest dan zelf een pincode.</p>`}
     <div class="brow"><button class="btn bp bf" onclick="saveSpeler(${s?`'${s.id}'`:'null'})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moSpeler')">Annuleren</button></div>
   `);
 }
@@ -4547,7 +4723,7 @@ async function naSpelerKoppeling(uit){
   closeModal('moSpeler');
   toast(uit.soort==='gekoppeld'
     ? uit.speler.naam+' stond al in Rondje! en is aan '+(uit.inLijst?'je spelerslijst':'je toernooi')+' toegevoegd — zijn eigen handicap en pincode blijven gelden'
-    : 'Speler opgeslagen');
+    : 'Speler opgeslagen. '+STANDAARD_PIN_UITLEG);
   await laadAlles(); renderBeheerSpelersPanel();
 }
 // De beheerder verlaat het naam- of e-mailveld van een NIEUWE speler.
@@ -4618,24 +4794,22 @@ async function saveSpeler(id){
       // Gedeelde speler (Toernooi Admin): alleen de handicap gaat mee.
       await sbPa('spelers', id, gedeeld ? {exact_hcp:hcp, hcp_bevestigd:true} : {naam, email:email||null, exact_hcp:hcp, actief, hcp_bevestigd:true});
     } else {
-      const pin = document.getElementById('spPin').value.trim();
-      if(!/^\d{4}$/.test(pin)){ toast('Pincode moet 4 cijfers zijn', true); return; }
       if(ta){
         // Toernooi Admin: op naam koppelen of nieuw aanmaken (koppelOfMaakSpeler).
         const tEl = document.getElementById('spToernooi');
-        const uit = await koppelOfMaakSpeler(tEl ? (tEl.value||null) : null, naam, {hcp, email:email||null, pin});
+        const uit = await koppelOfMaakSpeler(tEl ? (tEl.value||null) : null, naam, {hcp, email:email||null});
         if(!uit) return;
         await naSpelerKoppeling(uit);
         return;
       }
       if(allSpelers.some(x=>naamSleutel(x.naam)===naamSleutel(naam))){ toast('Er staat al een speler met deze naam in de lijst', true); return; }
-      const hash = await maakHash(pin);
+      const hash = await maakHash(STANDAARD_PIN);
       await sbP('spelers', metMaker({naam, email:email||null, exact_hcp:hcp, hcp_bevestigd:true, pin_hash:hash}));
     }
     closeModal('moSpeler');
     toast(vastgelegd.length
       ? 'Speler opgeslagen — de al afgeronde kaart van '+vastgelegd.join(', ')+' houdt de oude handicap ('+fH(oudeHcp)+'). Anders gewenst? Open die kaart als admin.'
-      : 'Speler opgeslagen');
+      : (id ? 'Speler opgeslagen' : 'Speler opgeslagen. '+STANDAARD_PIN_UITLEG));
     await laadAlles(); renderBeheerSpelersPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
@@ -4643,19 +4817,18 @@ async function resetSpelerPin(id){
   if(isToernooiAdmin() && !(beheerSpelers().some(x=>x.id===id) && spelerUitsluitendEigen(id))){
     toast('Deze speler doet ook mee aan toernooien van anderen — vraag de Super Admin om zijn pincode te resetten', true); return;
   }
-  const nieuw = prompt('Nieuwe 4-cijferige pincode voor deze speler:');
-  if(!nieuw) return;
-  if(!/^\d{4}$/.test(nieuw)){ toast('Pincode moet 4 cijfers zijn', true); return; }
+  const sp = allSpelers.find(x=>x.id===id);
+  const naam = sp ? sp.naam : 'deze speler';
+  if(!confirm('De pincode van '+naam+' terugzetten naar '+STANDAARD_PIN+'?\n\nBij de volgende keer inloggen kiest hij zelf een nieuwe pincode.')) return;
   try{
-    const hash = await maakHash(nieuw);
-    await sbPa('spelers', id, {pin_hash:hash});
-    toast('Pincode gereset naar '+nieuw+' — geef dit door aan de speler');
+    await sbPa('spelers', id, {pin_hash: await maakHash(STANDAARD_PIN)});
+    toast('De pincode van '+naam+' staat weer op '+STANDAARD_PIN+'. Bij de volgende inlog kiest hij zelf een nieuwe.');
   }catch(e){ toast('Mislukt: '+e.message, true); }
 }
 async function resetAllePincodes(){
   if(!isSuperAdmin()){ geenRechten(); return; }
   if(!allSpelers.length){ toast('Nog geen spelers', true); return; }
-  if(!confirm(`Pincode van alle ${allSpelers.length} spelers op 0000 zetten? Dit is een makkelijk te raden code — gebruik dit alleen als bewuste, tijdelijke vereenvoudiging (bijv. vlak voor een toernooi).`)) return;
+  if(!confirm(`Pincode van alle ${allSpelers.length} spelers terugzetten naar 0000?\n\nIedereen moet dan bij de volgende keer inloggen een eigen pincode kiezen — ook wie dat al eerder had gedaan.`)) return;
   try{
     const hash = await maakHash('0000');
     let ok=0, fout=0;
@@ -5207,6 +5380,8 @@ function holeGridHtml(holes, existing, readOnly, log, spelerId){
 // krijgt er, als de actuele handicap van de speler afwijkt, een knop bij om
 // die bewust alsnog op deze kaart toe te passen.
 function scVasteHcpInfoHtml(hcp, speler, tee, ctx){
+  if(hcp.handmatig) return `Playing hcp <b style="color:var(--gd)">${fPH(hcp.pH)}</b> — handmatig ingesteld door de beheerder`
+    + (isAdmin() ? `<div class="rm" style="margin-top:4px">Aanpassen kan bij de ronde, met de knop Handicaps.</div>` : '');
   const basis = hcp.exact!=null
     ? `Handicap van deze kaart (vastgelegd): ${fH(hcp.exact)} → playing hcp <b style="color:var(--gd)">${fPH(hcp.pH)}</b>`
     : `Playing hcp <b style="color:var(--gd)">${fPH(hcp.pH)}</b> — vastgelegd bij het sluiten van de ronde`;
@@ -5824,8 +5999,28 @@ async function scSyncOfficieleScore(subjectId, ingevoerdDoor){
       const updated = await sbPa('scores', rij.id, payload);
       Object.assign(rij, (updated&&updated[0])||payload);
     } else {
-      const inserted = await sbP('scores', {ronde_id:ctx.rondeId, speler_id:subjectId, ...payload});
-      const nieuw = (inserted&&inserted[0]) || {ronde_id:ctx.rondeId, speler_id:subjectId, ...payload};
+      let nieuw;
+      try{
+        const inserted = await sbP('scores', {ronde_id:ctx.rondeId, speler_id:subjectId, ...payload});
+        nieuw = (inserted&&inserted[0]) || {ronde_id:ctx.rondeId, speler_id:subjectId, ...payload};
+      }catch(eNieuw){
+        // De rij bestaat al zonder dat dit toestel dat wist — bijvoorbeeld
+        // aangemaakt doordat de beheerder een handmatige playing handicap
+        // instelde terwijl deze kaart openstond. Dan die rij ophalen en
+        // bijwerken, in plaats van telkens opnieuw te proberen aan te maken.
+        const best = await sbG('scores','ronde_id=eq.'+ctx.rondeId+'&speler_id=eq.'+subjectId);
+        if(!best || !best[0]) throw eNieuw;
+        const upd = await sbPa('scores', best[0].id, payload);
+        nieuw = Object.assign(best[0], (upd&&upd[0])||payload);
+        // Heeft die rij een handmatige handicap die dit toestel nog niet
+        // kende, reken de eigen kaart dan meteen daarmee door.
+        if(subjectId===ctx.spelerId && kaartPhHandmatig(nieuw)!=null && kaartPhHandmatig(nieuw)!==pH){
+          if(rij) Object.assign(rij, nieuw); else ctx.kolomScores.push(nieuw);
+          ctx.existingScore = ctx.kolomScores.find(sc=>sc.speler_id===ctx.spelerId);
+          setTimeout(()=>{ if(window._scCtx===ctx && document.getElementById('scTee')) onTeeChange(); }, 0);
+          return uitkomst;
+        }
+      }
       if(rij) Object.assign(rij, nieuw); else ctx.kolomScores.push(nieuw);
     }
   }catch(e){ /* scores-tabel sync mislukt; invoerlog blijft leidend, volgende cel-wijziging probeert opnieuw */ }
