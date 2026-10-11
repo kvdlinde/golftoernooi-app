@@ -522,7 +522,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.50.0';
+const APP_VERSION = '1.51.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -892,7 +892,7 @@ create table if not exists toernooien (
   naam text not null,
   beschrijving text,
   allowance_pct numeric(5,1) not null default 100,
-  status text not null default 'voorbereiding', -- voorbereiding | lopend | afgerond
+  status text not null default 'voorbereiding', -- niet meer gebruikt sinds v1.51.0: de app leidt de status af uit de rondes
   logo_data text, -- logo als data-URI (base64), lokaal verkleind vóór upload
   created_at timestamptz default now()
 );
@@ -2648,6 +2648,28 @@ function statusBadge(status){
   return `<span class="sp ${map[status]||'sg'}">${esc(status)}</span>`;
 }
 
+/* ---------- TOERNOOISTATUS (automatisch, sinds v1.51.0) ----------
+   Tot v1.50.0 koos de beheerder de status met de hand (Voorbereiding / Lopend /
+   Afgerond). Dat veld deed verder niets en kon dus ongemerkt fout staan. Nu
+   volgt het etiket uit de rondes:
+   - geen rondes                                   -> voorbereiding
+   - alle rondes gesloten                          -> afgerond
+   - nog niets gesloten en elke ronde heeft een
+     datum in de toekomst                          -> voorbereiding
+   - al het andere                                 -> lopend
+   Een open ronde zonder datum telt als 'er kan gespeeld worden' (spelers
+   kunnen daar meteen scores invoeren, zie magNogNietScoren) -> lopend.
+   De kolom toernooien.status blijft in de database staan maar wordt niet meer
+   gelezen of geschreven. */
+function toernooiStatusAuto(toernooiId){
+  const rondes = allRondes.filter(r=>r.toernooi_id===toernooiId);
+  if(!rondes.length) return 'voorbereiding';
+  if(rondes.every(r=>r.status==='gesloten')) return 'afgerond';
+  const vandaag = vandaagStr();
+  const begonnen = rondes.some(r=>r.status==='gesloten' || !r.datum || r.datum<=vandaag);
+  return begonnen ? 'lopend' : 'voorbereiding';
+}
+
 let toernooiOpenIds = new Set();
 function toggleToernooiCard(id){
   if(toernooiOpenIds.has(id)) toernooiOpenIds.delete(id); else toernooiOpenIds.add(id);
@@ -2678,7 +2700,7 @@ function renderBeheerToernooienPanel(){
       <div class="ch" style="cursor:pointer${open?'':';border-bottom:none'}" onclick="toggleToernooiCard('${t.id}')">
         <div style="display:flex;align-items:center">
           ${t.logo_data?`<img src="${t.logo_data}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;margin-right:8px">`:''}
-          <div><div class="ct">${esc(t.naam)}</div><div class="rm">${statusBadge(t.status)} · allowance ${t.allowance_pct}%</div></div>
+          <div><div class="ct">${esc(t.naam)}</div><div class="rm">${statusBadge(toernooiStatusAuto(t.id))} · allowance ${t.allowance_pct}%</div></div>
         </div>
         <span style="font-size:1.1rem;color:var(--tl);flex-shrink:0">${open?'▴':'▾'}</span>
       </div>
@@ -3123,11 +3145,6 @@ function openToernooiModal(id){
       <div id="tnLogoPreview" style="margin-top:8px">${window._tnLogoData?`<img src="${window._tnLogoData}" style="max-height:70px;border-radius:8px;display:block;margin-bottom:6px"><a href="#" onclick="event.preventDefault();verwijderToernooiLogo()">Logo verwijderen</a>`:''}</div>
     </div>
     <div class="fg"><label>Handicap-allowance <span class="hint">% van de course handicap dat als playing handicap telt</span></label><input type="number" id="tnAllowance" value="${t?t.allowance_pct:100}"></div>
-    <div class="fg"><label>Status</label><select id="tnStatus">
-      <option value="voorbereiding" ${!t||t.status==='voorbereiding'?'selected':''}>Voorbereiding</option>
-      <option value="lopend" ${t&&t.status==='lopend'?'selected':''}>Lopend</option>
-      <option value="afgerond" ${t&&t.status==='afgerond'?'selected':''}>Afgerond</option>
-    </select></div>
     <div class="brow"><button class="btn bp bf" onclick="saveToernooi(${t?`'${t.id}'`:'null'})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moToernooi')">Annuleren</button></div>
   `);
 }
@@ -3174,14 +3191,13 @@ async function saveToernooi(id){
   const naam = document.getElementById('tnNaam').value.trim();
   const beschrijving = document.getElementById('tnBeschrijving').value.trim();
   const allowance_pct = parseFloat(document.getElementById('tnAllowance').value);
-  const status = document.getElementById('tnStatus').value;
   const logo_data = window._tnLogoData || null;
   if(!naam || isNaN(allowance_pct)){ toast('Vul naam en allowance in', true); return; }
   if(id && !magToernooiBeheren(id)){ geenRechten(); return; }
   try{
-    if(id) await sbPa('toernooien', id, {naam, beschrijving:beschrijving||null, allowance_pct, status, logo_data});
+    if(id) await sbPa('toernooien', id, {naam, beschrijving:beschrijving||null, allowance_pct, logo_data});
     else {
-      const nieuw = await sbP('toernooien', metMaker({naam, beschrijving:beschrijving||null, allowance_pct, status, logo_data}));
+      const nieuw = await sbP('toernooien', metMaker({naam, beschrijving:beschrijving||null, allowance_pct, logo_data}));
       // Een Toernooi Admin beheert het toernooi dat hij zelf aanmaakt meteen.
       if(isToernooiAdmin() && nieuw && nieuw[0]) await sbP('toernooi_admins', {toernooi_id: nieuw[0].id, admin_id: ingelogdAdmin.id});
     }
