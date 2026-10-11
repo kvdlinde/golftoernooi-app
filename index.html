@@ -345,6 +345,13 @@ input.sp-kies,.sp-kiesalles input{width:20px;height:20px;flex-shrink:0;margin:1p
 .weg-lijst li span{display:block;font-size:.74rem;color:var(--tl)}
 .db-melding{background:#fdf1d8;border:1.5px solid var(--gold);border-radius:var(--r);padding:11px 13px;margin-bottom:12px;font-family:'Inter',sans-serif;font-size:.82rem;line-height:1.4;color:var(--td)}
 .db-melding>b:first-child{display:block;margin-bottom:3px;color:var(--gd)}
+.db-melding .btn{margin-top:8px}
+.bw-item{border:1.5px solid var(--cd);border-radius:var(--r);padding:11px 13px;margin-bottom:10px;font-family:'Inter',sans-serif}
+.bw-kop{font-size:.9rem;font-weight:700;color:var(--gd)}
+.bw-wie{font-size:.74rem;color:var(--tl);margin-top:1px}
+.bw-item ul{margin:8px 0 0;padding-left:18px;font-size:.84rem;line-height:1.45;color:var(--td)}
+.bw-gebruik{font-size:.74rem;color:var(--tl);margin-top:8px}
+.bw-lijst{max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
 /* Op desktop breekt de Spelers-tabel uit de smalle (mobiel-georiënteerde) .main-kolom
    zodat de Acties-kolom nooit buiten beeld valt — i.p.v. horizontaal te moeten scrollen. */
 @media (min-width:700px){
@@ -509,7 +516,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.47.1';
+const APP_VERSION = '1.48.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -556,7 +563,7 @@ let ROLLEN_AAN = false;
 // 'admin_spelers'): een bestaande speler die hij aan zijn lijst heeft gekoppeld
 // zonder dat die al aan een van zijn toernooien meedoet. Zo maakt het niet uit
 // of hij eerst zijn spelers of eerst zijn toernooi invoert. Bestaat de tabel
-// nog niet (migratie-1.46.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
+// nog niet (migratie-1.48.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
 // en kan koppelen alleen via een toernooi, zoals in v1.45.0.
 let allAdminSpelers = [];
 let SPELERSLIJST_AAN = false;
@@ -617,6 +624,19 @@ function spelerUitsluitendEigen(spelerId){
 // (een andere par of stroke index werkt door in andermans toernooi).
 function magBaanBewerken(baan){ return isSuperAdmin() || (isToernooiAdmin() && !!baan && baan.aangemaakt_door===ingelogdAdmin.id); }
 function magTeeBewerken(tee, baan){ return magBaanBewerken(baan) || (isToernooiAdmin() && !!tee && tee.aangemaakt_door===ingelogdAdmin.id); }
+// Sinds v1.48.0 mag een Toernooi Admin ook bij een baan van een ander de
+// INHOUD aanpassen: lussen en holes bewerken, lussen/combinaties toevoegen en
+// bestaande tees wijzigen. Dat werkt door in elk toernooi dat die baan
+// gebruikt, dus elke zo'n wijziging wordt vastgelegd (tabel 'baan_wijzigingen')
+// en de Super Admin krijgt er een melding van zodra hij de app opent. Bestaat
+// die tabel nog niet (migratie-1.48.0.sql niet gedraaid), dan blijft het zoals
+// in v1.47: zonder melding geen wijzigingen aan andermans baan.
+// De naam van de baan wijzigen en iets verwijderen blijft voorbehouden aan de
+// Super Admin en aan wie de baan (of tee) zelf heeft ingevoerd.
+let allBaanWijzigingen = [];     // nog niet door de Super Admin geziene wijzigingen
+let BAANLOG_AAN = false;
+let baanMeldingGetoond = false;  // de melding verschijnt één keer per keer dat de app wordt geopend
+function magBaanInhoudBewerken(baan){ return magBaanBewerken(baan) || (isToernooiAdmin() && BAANLOG_AAN && !!baan); }
 // Legt vast wie iets aanmaakt (kolom 'aangemaakt_door', pas na de migratie).
 function metMaker(velden){ return (ROLLEN_AAN && ingelogdAdmin) ? {...velden, aangemaakt_door: ingelogdAdmin.id} : velden; }
 function geenRechten(){ toast('Daar heb je als Toernooi Admin geen rechten voor — vraag de Super Admin.', true); }
@@ -1107,6 +1127,27 @@ create table if not exists admin_spelers (
 alter table admin_spelers enable row level security;
 drop policy if exists "allow all" on admin_spelers; create policy "allow all" on admin_spelers for all using (true);
 
+-- 2c. Logboek (sinds v1.48.0): wat een Toernooi Admin wijzigt aan een baan die
+--     een ander heeft ingevoerd. De Super Admin krijgt deze wijzigingen te zien
+--     zodra hij de app opent; 'gezien_op' wordt gevuld als hij ze heeft gezien.
+create table if not exists baan_wijzigingen (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamptz default now(),
+  admin_id uuid references admins(id) on delete set null,
+  admin_naam text,
+  baan_id uuid references banen(id) on delete cascade,
+  soort text not null,
+  actie text not null,
+  object_id uuid,
+  omschrijving text,
+  oud jsonb,
+  nieuw jsonb,
+  gezien_op timestamptz,
+  gezien_door uuid references admins(id) on delete set null
+);
+alter table baan_wijzigingen enable row level security;
+drop policy if exists "allow all" on baan_wijzigingen; create policy "allow all" on baan_wijzigingen for all using (true);
+
 -- 3. Wie iets heeft aangemaakt. Leeg bij alles wat al bestond (= van de Super Admin).
 --    Bepaalt wat een Toernooi Admin mag bewerken of verwijderen.
 alter table toernooien add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
@@ -1407,6 +1448,11 @@ async function boot(){
     document.getElementById('panel-login').classList.add('active');
     renderLoginPanel();
   }
+  // Super Admin: wijzigingen van Toernooi Admins aan banen laten zien.
+  if(isSuperAdmin() && ROLLEN_AAN && allBaanWijzigingen.length && !baanMeldingGetoond){
+    baanMeldingGetoond = true;
+    openBaanMeldingen();
+  }
 }
 
 // Beheeraccounts (zonder wachtwoord-hash) en de toewijzing van toernooien aan
@@ -1422,11 +1468,17 @@ async function laadRollen(){
   }
   // Een rol die de Super Admin intussen heeft gewijzigd geldt meteen.
   if(ingelogdAdmin){ const vers = allAdmins.find(a=>a.id===ingelogdAdmin.id); if(vers) ingelogdAdmin = vers; }
-  // Eigen spelerslijsten van Toernooi Admins (migratie-1.46.0.sql).
+  // Eigen spelerslijsten van Toernooi Admins (migratie-1.48.0.sql).
   if(ROLLEN_AAN){
     try{ allAdminSpelers = await sbG('admin_spelers','') || []; SPELERSLIJST_AAN = true; }
     catch(e){ allAdminSpelers = []; SPELERSLIJST_AAN = false; }
   } else { allAdminSpelers = []; SPELERSLIJST_AAN = false; }
+  // Wijzigingen van Toernooi Admins aan banen van anderen die de Super Admin
+  // nog niet heeft gezien (migratie-1.48.0.sql).
+  if(ROLLEN_AAN){
+    try{ allBaanWijzigingen = await sbG('baan_wijzigingen','gezien_op=is.null&order=created_at.desc') || []; BAANLOG_AAN = true; }
+    catch(e){ allBaanWijzigingen = []; BAANLOG_AAN = false; }
+  } else { allBaanWijzigingen = []; BAANLOG_AAN = false; }
 }
 async function laadAlles(){
   await laadRollen();
@@ -1872,6 +1924,7 @@ async function doAdminLoginViaWachtwoordveld(pwd, naam){
 }
 
 function logoutAdmin(){
+  baanMeldingGetoond = false;
   ingelogdAdmin = null;
   localStorage.removeItem('admin_naam');
   boot();
@@ -1948,6 +2001,10 @@ function renderBanenPanel(){
   <div class="sh"><div><div class="st">Banen &amp; lussen</div><div class="ss">Baanbeheer voor toernooien</div></div>
     <button class="btn bp bsm" onclick="openBaanModal()">+ Baan</button>
   </div>
+  ${(isSuperAdmin() && ROLLEN_AAN && allBaanWijzigingen.length)?`<div class="db-melding" id="baanMeldingBalk"><b>${allBaanWijzigingen.length===1?'1 wijziging':allBaanWijzigingen.length+' wijzigingen'} door een Toernooi Admin</b>Een Toernooi Admin heeft iets aangepast aan een baan die hij niet zelf heeft ingevoerd.<br><button class="btn bg bsm" onclick="openBaanMeldingen()">Bekijken</button></div>`:''}
+  ${(ROLLEN_AAN && !BAANLOG_AAN)?`<div class="db-melding" id="baanDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
+    ? 'Voer <b>migratie-1.48.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
+    : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.48.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
   <div id="banenLijst"></div>`;
   const lijst = document.getElementById('banenLijst');
   if(!allBanen.length){ lijst.innerHTML = '<div class="empty">Nog geen banen toegevoegd.</div>'; return; }
@@ -1964,9 +2021,13 @@ function renderBanenPanel(){
     // Super Admin: alles. Toernooi Admin: alleen zijn eigen banen bewerken;
     // aan een baan van een ander kan hij wel een tee toevoegen.
     const bewerkbaar = magBaanBewerken(baan);
-    const teeKnoppen = (t, combId)=> magTeeBewerken(t, baan) ? `
-            <a href="#" onclick="event.preventDefault();openTeeModal('${combId}','${t.id}')" style="margin-left:6px">✎</a>
-            <a href="#" onclick="event.preventDefault();verwijderTee('${t.id}')" style="margin-left:4px">×</a>` : '';
+    // 'inhoud': lussen, holes en tees aanpassen — sinds v1.48.0 ook voor een
+    // Toernooi Admin bij een baan van een ander (met melding aan de Super
+    // Admin). Verwijderen blijft bij 'bewerkbaar' / de eigen tee.
+    const inhoud = magBaanInhoudBewerken(baan);
+    const teeKnoppen = (t, combId)=> (magTeeBewerken(t, baan) || inhoud) ? `
+            <a href="#" onclick="event.preventDefault();openTeeModal('${combId}','${t.id}')" style="margin-left:6px">✎</a>${magTeeBewerken(t, baan)?`
+            <a href="#" onclick="event.preventDefault();verwijderTee('${t.id}')" style="margin-left:4px">×</a>`:''}` : '';
     return `
     <div class="card">
       <div class="ch" style="cursor:pointer${open?'':';border-bottom:none'}" onclick="toggleBaanCard('${baan.id}')">
@@ -1978,7 +2039,9 @@ function renderBanenPanel(){
         ${bewerkbaar?`<div class="brow" style="margin-bottom:14px">
           <button class="btn bg bsm" onclick="openBaanModal('${baan.id}')">Bewerken</button>
           <button class="btn bd bsm" onclick="verwijderBaan('${baan.id}')">Verwijderen</button>
-        </div>`:`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">Deze baan is door een andere beheerder ingevoerd. Je kunt hem voor je toernooi gebruiken en er een tee aan toevoegen; holes en bestaande tees wijzigt de Super Admin.</p>`}
+        </div>`:`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">${inhoud
+          ? 'Deze baan is door een andere beheerder ingevoerd. Je kunt lussen, holes en tees aanpassen of toevoegen; de Super Admin krijgt daarvan een melding. De naam van de baan wijzigen en iets verwijderen kan alleen de Super Admin.'
+          : 'Deze baan is door een andere beheerder ingevoerd. Je kunt hem voor je toernooi gebruiken en er een tee aan toevoegen; holes en bestaande tees wijzigt de Super Admin.'}</p>`}
         ${lussenSolo.length? lussenSolo.map(l=>{
           const comb = combinatieVoorLus(l.id);
           const tees = comb ? allTees.filter(t=>t.combinatie_id===comb.id) : [];
@@ -1986,8 +2049,8 @@ function renderBanenPanel(){
             <div><div class="rd" style="font-size:.95rem">${esc(l.naam)}</div><div class="rm">18 holes · par ${l.holes.reduce((a,x)=>a+x.par,0)} · ${tees.length} tee(s)</div></div>
             <div class="brow">
               <button class="btn bp bsm" onclick="voegTeeToeAanLus('${baan.id}','${l.id}')">+ Tee</button>
-              ${bewerkbaar?`<button class="btn bg bsm" onclick="openLusModal('${baan.id}','${l.id}')">Holes bewerken</button>
-              <button class="btn bd bsm" onclick="verwijderLus('${l.id}')">×</button>`:''}
+              ${inhoud?`<button class="btn bg bsm" onclick="openLusModal('${baan.id}','${l.id}')">Holes bewerken</button>`:''}
+              ${bewerkbaar?`<button class="btn bd bsm" onclick="verwijderLus('${l.id}')">×</button>`:''}
             </div>
           </div>
           ${tees.length?`<div class="ra">${tees.map(t=>`<span class="sp sbdg">${esc(t.kleur)} · CR ${t.course_rating} / Slope ${t.slope_rating}${teeKnoppen(t, comb.id)}</span>`).join('')}</div>`:''}
@@ -1995,19 +2058,19 @@ function renderBanenPanel(){
         }).join('') : ''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <b style="font-family:'Inter',sans-serif;font-size:.8rem;color:var(--tm)">Lussen (9-holes bouwstenen)</b>
-          ${bewerkbaar?`<button class="btn bg bsm" onclick="openLusModal('${baan.id}')">+ Lus</button>`:''}
+          ${inhoud?`<button class="btn bg bsm" onclick="openLusModal('${baan.id}')">+ Lus</button>`:''}
         </div>
         ${lussenBouwsteen.length? lussenBouwsteen.map(l=>`
           <div class="rc"><div class="rch">
             <div><div class="rd" style="font-size:.95rem">${esc(l.naam)}</div><div class="rm">${l.holes.length} holes · par ${l.holes.reduce((a,x)=>a+x.par,0)}</div></div>
-            ${bewerkbaar?`<div class="brow">
-              <button class="btn bg bsm" onclick="openLusModal('${baan.id}','${l.id}')">Bewerken</button><button class="btn bd bsm" onclick="verwijderLus('${l.id}')">×</button>
+            ${inhoud?`<div class="brow">
+              <button class="btn bg bsm" onclick="openLusModal('${baan.id}','${l.id}')">Bewerken</button>${bewerkbaar?`<button class="btn bd bsm" onclick="verwijderLus('${l.id}')">×</button>`:''}
             </div>`:''}
           </div></div>`).join('') : '<div class="empty">Nog geen losse 9-holes lussen — gebruik "+ Lus" hierboven alleen als je baan uit losse negens bestaat die je moet combineren.</div>'}
         ${(lussenBouwsteen.length || combsMulti.length) ? `
         <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px">
           <b style="font-family:'Inter',sans-serif;font-size:.8rem;color:var(--tm)">Combinaties van meerdere 9-holes lussen</b>
-          ${bewerkbaar?`<button class="btn bg bsm" onclick="openCombinatieModal('${baan.id}')" ${lussenBouwsteen.length?'':'disabled'}>+ Combinatie</button>`:''}
+          ${inhoud?`<button class="btn bg bsm" onclick="openCombinatieModal('${baan.id}')" ${lussenBouwsteen.length?'':'disabled'}>+ Combinatie</button>`:''}
         </div>
         ${combsMulti.length? combsMulti.map(c=>{
           const tees = allTees.filter(t=>t.combinatie_id===c.id);
@@ -2107,8 +2170,36 @@ function vulHolesVanuitTekst(){
   }
   toast('Holes ingevuld — controleer de velden en sla op');
 }
+// WIJZIGINGEN AAN EEN BAAN VAN EEN ANDER VASTLEGGEN (sinds v1.48.0)
+// 'vreemd' = een Toernooi Admin past iets aan dat hij niet zelf heeft ingevoerd.
+// - Een WIJZIGING wordt eerst vastgelegd en dan pas doorgevoerd: lukt het
+//   vastleggen niet, dan gebeurt er niets (geen wijziging zonder melding).
+//   Mislukt daarna de wijziging zelf, dan gaat de melding weer weg.
+// - Een TOEVOEGING (nieuwe lus, combinatie of tee) raakt geen bestaande
+//   gegevens; die wordt na het aanmaken vastgelegd.
+function baanIsVreemd(baan){ return isToernooiAdmin() && !!baan && !magBaanBewerken(baan); }
+async function logBaanWijziging(baan, soort, actie, objectId, omschrijving, oud, nieuw){
+  const rijen = await sbP('baan_wijzigingen', {admin_id: ingelogdAdmin.id, admin_naam: ingelogdAdmin.naam, baan_id: baan.id, soort, actie, object_id: objectId||null, omschrijving, oud: oud||null, nieuw: nieuw||null});
+  return (rijen && rijen[0]) ? rijen[0].id : null;
+}
+// De rondes die op dit onderdeel van de baan gespeeld worden.
+function rondesOpBaanOnderdeel(soort, objectId){
+  let combIds;
+  if(soort==='lus') combIds = allCombinaties.filter(c=>c.lus1_id===objectId || c.lus2_id===objectId).map(c=>c.id);
+  else if(soort==='tee'){ const t = teeById(objectId); combIds = t ? [t.combinatie_id] : []; }
+  else combIds = [objectId];
+  return allRondes.filter(r=>combIds.includes(r.combinatie_id));
+}
+// Vraag aan de Toernooi Admin voordat hij iets wijzigt aan andermans baan.
+// Noemt geen namen van toernooien waar hij niet bij kan — alleen het aantal.
+function vreemdeBaanVraag(soort, objectId){
+  const mijn = beheerToernooiIds();
+  const n = new Set(rondesOpBaanOnderdeel(soort, objectId).map(r=>r.toernooi_id).filter(id=>!mijn.has(id))).size;
+  return 'Deze baan is door een andere beheerder ingevoerd'+(n?' en wordt gebruikt in '+n+' toernooi'+(n===1?'':'en')+' van anderen':'')+'.\n\nJe wijziging geldt voor iedereen die deze baan gebruikt, en kan de uitslag van al gespeelde rondes veranderen. De Super Admin krijgt een melding van wat je wijzigt.\n\nDoorgaan?';
+}
 async function saveLus(baanId, id){
-  if(!magBaanBewerken(baanById(baanId))){ geenRechten(); return; }
+  const baan = baanById(baanId);
+  if(!magBaanInhoudBewerken(baan)){ geenRechten(); return; }
   const naam = document.getElementById('lusNaam').value.trim();
   if(!naam){ toast('Vul een naam in', true); return; }
   const n = id ? lusById(id).holes.length : parseInt(document.getElementById('lusAantal').value);
@@ -2119,10 +2210,26 @@ async function saveLus(baanId, id){
     if(isNaN(par)||isNaN(si)){ toast('Vul alle holes volledig in', true); return; }
     holes.push({par, si});
   }
+  const vreemd = baanIsVreemd(baan);
   try{
-    if(id) await sbPa('lussen', id, {naam, holes});
-    else await sbP('lussen', {baan_id:baanId, naam, holes});
-    closeModal('moLus'); toast('Lus opgeslagen');
+    let gemeld = false;
+    if(id){
+      const lus = lusById(id);
+      const plat = h => (h||[]).map(x=>x.par+'/'+x.si).join(',');
+      const gewijzigd = lus.naam!==naam || plat(lus.holes)!==plat(holes);
+      let logId = null;
+      if(vreemd && gewijzigd){
+        if(!confirm(vreemdeBaanVraag('lus', id))) return;
+        logId = await logBaanWijziging(baan, 'lus', 'gewijzigd', id, baan.naam+' — '+lus.naam, {naam: lus.naam, holes: lus.holes}, {naam, holes});
+        gemeld = true;
+      }
+      try{ await sbPa('lussen', id, {naam, holes}); }
+      catch(e){ if(logId) sbD('baan_wijzigingen', logId).catch(()=>{}); throw e; }
+    } else {
+      const rijen = await sbP('lussen', {baan_id:baanId, naam, holes});
+      if(vreemd){ await logBaanWijziging(baan, 'lus', 'toegevoegd', rijen && rijen[0] ? rijen[0].id : null, baan.naam+' — '+naam, null, {naam, holes}); gemeld = true; }
+    }
+    closeModal('moLus'); toast('Lus opgeslagen'+(gemeld?' — de Super Admin krijgt hiervan een melding':''));
     await laadAlles(); renderBanenPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
@@ -2166,7 +2273,10 @@ function openCombinatieModal(baanId, combId){
   `);
 }
 async function saveCombinatie(baanId, id){
-  if(!magBaanBewerken(baanById(baanId))){ geenRechten(); return; }
+  const baan = baanById(baanId);
+  // Een nieuwe combinatie mag ook een Toernooi Admin bij andermans baan maken
+  // (met melding); een bestaande combinatie wijzigen blijft bij de eigenaar.
+  if(id ? !magBaanBewerken(baan) : !magBaanInhoudBewerken(baan)){ geenRechten(); return; }
   const naam = document.getElementById('combNaam').value.trim();
   const lus1_id = document.getElementById('combLus1').value || null;
   const lus2_id = document.getElementById('combLus2').value || null;
@@ -2175,9 +2285,17 @@ async function saveCombinatie(baanId, id){
   if(l1.holes.length===18 && lus2_id){ toast('Lus 1 heeft al 18 holes — laat lus 2 leeg', true); return; }
   if(l1.holes.length===9 && !lus2_id){ toast('Lus 1 heeft maar 9 holes — kies ook een tweede lus', true); return; }
   try{
+    let gemeld = false;
     if(id) await sbPa('combinaties', id, {naam, lus1_id, lus2_id});
-    else await sbP('combinaties', {baan_id:baanId, naam, lus1_id, lus2_id});
-    closeModal('moComb'); toast('Combinatie opgeslagen');
+    else {
+      const rijen = await sbP('combinaties', {baan_id:baanId, naam, lus1_id, lus2_id});
+      if(baanIsVreemd(baan)){
+        const l2 = lus2_id ? lusById(lus2_id) : null;
+        await logBaanWijziging(baan, 'combinatie', 'toegevoegd', rijen && rijen[0] ? rijen[0].id : null, baan.naam+' — '+naam, null, {naam, lussen: [l1.naam].concat(l2?[l2.naam]:[])});
+        gemeld = true;
+      }
+    }
+    closeModal('moComb'); toast('Combinatie opgeslagen'+(gemeld?' — de Super Admin krijgt hiervan een melding':''));
     await laadAlles(); renderBanenPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
@@ -2211,12 +2329,36 @@ async function saveTee(combId, id){
   const par = parseInt(document.getElementById('teePar').value);
   if(!kleur||isNaN(cr)||isNaN(slope)||isNaN(par)){ toast('Vul alle velden correct in', true); return; }
   // Een nieuwe tee mag elke beheerder toevoegen (ook aan een baan van een
-  // ander); een bestaande tee wijzigen alleen wie hem of de baan heeft ingevoerd.
-  if(id && !magTeeBewerken(teeById(id), baanById((combinatieById(combId)||{}).baan_id))){ geenRechten(); return; }
+  // ander). Een bestaande tee wijzigen: wie hem of de baan heeft ingevoerd, en
+  // sinds v1.48.0 ook een andere Toernooi Admin — met melding aan de Super Admin.
+  const comb = combinatieById(combId);
+  const baan = baanById((comb||{}).baan_id);
+  const tee = id ? teeById(id) : null;
+  if(id && !(magTeeBewerken(tee, baan) || magBaanInhoudBewerken(baan))){ geenRechten(); return; }
+  const nieuw = {kleur, course_rating:cr, slope_rating:slope, par};
+  const waar = (baan?baan.naam:'?')+' — '+(comb?comb.naam:'?');
   try{
-    if(id) await sbPa('tees', id, {kleur, course_rating:cr, slope_rating:slope, par});
-    else await sbP('tees', metMaker({combinatie_id:combId, kleur, course_rating:cr, slope_rating:slope, par}));
-    closeModal('moTee'); toast('Tee opgeslagen');
+    let gemeld = false;
+    if(id){
+      const oud = {kleur: tee.kleur, course_rating: Number(tee.course_rating), slope_rating: Number(tee.slope_rating), par: Number(tee.par)};
+      const gewijzigd = ['kleur','course_rating','slope_rating','par'].some(k=>oud[k]!==nieuw[k]);
+      const vreemd = isToernooiAdmin() && !magTeeBewerken(tee, baan);
+      let logId = null;
+      if(vreemd && gewijzigd){
+        if(!confirm(vreemdeBaanVraag('tee', id))) return;
+        logId = await logBaanWijziging(baan, 'tee', 'gewijzigd', id, waar+' — tee '+tee.kleur, oud, nieuw);
+        gemeld = true;
+      }
+      try{ await sbPa('tees', id, nieuw); }
+      catch(e){ if(logId) sbD('baan_wijzigingen', logId).catch(()=>{}); throw e; }
+    } else {
+      const rijen = await sbP('tees', metMaker({combinatie_id:combId, ...nieuw}));
+      if(baanIsVreemd(baan) && BAANLOG_AAN){
+        try{ await logBaanWijziging(baan, 'tee', 'toegevoegd', rijen && rijen[0] ? rijen[0].id : null, waar+' — tee '+kleur, null, nieuw); gemeld = true; }
+        catch(e){ /* de tee staat er; alleen de melding is niet gelukt */ }
+      }
+    }
+    closeModal('moTee'); toast('Tee opgeslagen'+(gemeld?' — de Super Admin krijgt hiervan een melding':''));
     await laadAlles(); renderBanenPanel();
   }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
 }
@@ -2226,6 +2368,87 @@ async function verwijderTee(id){
   if(!confirm('Deze tee verwijderen?')) return;
   try{ await sbD('tees', id); toast('Tee verwijderd'); await laadAlles(); renderBanenPanel(); }
   catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
+}
+
+/* ---------- MELDING: WIJZIGINGEN AAN BANEN DOOR TOERNOOI ADMINS (Super Admin) ----------
+   Zodra de Super Admin de app opent, ziet hij wat Toernooi Admins hebben
+   aangepast aan banen die ze niet zelf hebben ingevoerd: wie, wanneer, wat er
+   was en wat het nu is, en welke toernooien die baan gebruiken. "Gezien" haalt
+   de melding weg; "Later" laat hem bij de volgende keer openen terugkomen. */
+function baanWijzigingRegels(w){
+  const o = w.oud || {}, n = w.nieuw || {};
+  const regels = [];
+  if(w.actie==='toegevoegd'){
+    if(w.soort==='lus') regels.push('Nieuwe lus "'+(n.naam||'?')+'" ('+((n.holes||[]).length)+' holes, par '+(n.holes||[]).reduce((a,x)=>a+(x.par||0),0)+')');
+    else if(w.soort==='tee') regels.push('Nieuwe tee "'+(n.kleur||'?')+'" (CR '+n.course_rating+' / Slope '+n.slope_rating+' / par '+n.par+')');
+    else regels.push('Nieuwe combinatie "'+(n.naam||'?')+'"'+((n.lussen||[]).length?' ('+n.lussen.join(' + ')+')':''));
+    return regels;
+  }
+  if(w.soort==='lus'){
+    if(o.naam!==n.naam) regels.push('Naam: '+o.naam+' → '+n.naam);
+    const oh = o.holes||[], nh = n.holes||[];
+    for(let i=0;i<Math.max(oh.length, nh.length);i++){
+      const a = oh[i]||{}, b = nh[i]||{}, d = [];
+      if(a.par!==b.par) d.push('par '+a.par+' → '+b.par);
+      if(a.si!==b.si) d.push('stroke index '+a.si+' → '+b.si);
+      if(d.length) regels.push('Hole '+(i+1)+': '+d.join(', '));
+    }
+  } else if(w.soort==='tee'){
+    if(o.kleur!==n.kleur) regels.push('Naam: '+o.kleur+' → '+n.kleur);
+    if(Number(o.course_rating)!==Number(n.course_rating)) regels.push('Course Rating: '+o.course_rating+' → '+n.course_rating);
+    if(Number(o.slope_rating)!==Number(n.slope_rating)) regels.push('Slope Rating: '+o.slope_rating+' → '+n.slope_rating);
+    if(Number(o.par)!==Number(n.par)) regels.push('Par: '+o.par+' → '+n.par);
+  }
+  return regels.length ? regels : ['(geen verschil meer te zien)'];
+}
+// "Algarve 6 2026 (2 gespeeld, 1 open)" voor de rondes op het gewijzigde onderdeel.
+function baanWijzigingGebruik(w){
+  if(w.actie!=='gewijzigd' || !w.object_id) return '';
+  const per = {};
+  rondesOpBaanOnderdeel(w.soort, w.object_id).forEach(r=>{
+    const t = toernooiById(r.toernooi_id); if(!t) return;
+    if(!per[t.id]) per[t.id] = {naam: t.naam, gespeeld: 0, open: 0};
+    if(r.status==='gesloten') per[t.id].gespeeld++; else per[t.id].open++;
+  });
+  const lijst = Object.values(per).map(x=>x.naam+' ('+[x.gespeeld?x.gespeeld+' gespeeld':'', x.open?x.open+' open':''].filter(Boolean).join(', ')+')');
+  return lijst.length ? 'Gebruikt in: '+lijst.join('; ') : 'Nog in geen enkele ronde gebruikt';
+}
+function openBaanMeldingen(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const lijst = allBaanWijzigingen;
+  if(!lijst.length){ toast('Geen nieuwe wijzigingen aan banen'); return; }
+  const tijd = d => { try{ return new Date(d).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } };
+  const holesGewijzigd = lijst.some(w=>w.soort==='lus' && w.actie==='gewijzigd');
+  openModalHtml('moBaanMeldingen', `
+    <h3>Wijzigingen aan banen</h3>
+    <p style="font-size:.82rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Een Toernooi Admin heeft iets aangepast aan een baan die hij niet zelf heeft ingevoerd.</p>
+    <div class="bw-lijst" id="bwLijst">
+    ${lijst.map(w=>{ const g = baanWijzigingGebruik(w); return `<div class="bw-item" data-id="${w.id}">
+      <div class="bw-kop">${esc(w.omschrijving||'Baan')}</div>
+      <div class="bw-wie">${esc(w.admin_naam||'Onbekende beheerder')} · ${esc(tijd(w.created_at))}</div>
+      <ul>${baanWijzigingRegels(w).map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
+      ${g?`<div class="bw-gebruik">${esc(g)}</div>`:''}
+    </div>`; }).join('')}
+    </div>
+    ${holesGewijzigd?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:12px">Let op: bij rondes met een bijzondere spelvorm (2x3/5x4/2x5 of Hidden Holes) rekent het klassement met de par en stroke index zoals ze nu zijn. Een wijziging aan de holes kan de uitslag van zo'n gespeelde ronde dus veranderen. Klopt een wijziging niet, zet hem dan terug via Banen → Holes bewerken.</p>`:''}
+    <div class="brow"><button class="btn bp bf" id="bwGezien" onclick="baanMeldingenGezien()">Gezien</button><button class="btn bg bf" onclick="closeModal('moBaanMeldingen')">Later</button></div>
+  `);
+}
+async function baanMeldingenGezien(){
+  if(!isSuperAdmin()){ geenRechten(); return; }
+  const lijst = allBaanWijzigingen.slice();
+  const knop = document.getElementById('bwGezien');
+  if(knop){ knop.disabled = true; knop.textContent = 'Bezig…'; }
+  const nu = new Date().toISOString();
+  let fout = 0;
+  for(const w of lijst){
+    try{ await sbPa('baan_wijzigingen', w.id, {gezien_op: nu, gezien_door: ingelogdAdmin.id}); }
+    catch(e){ fout++; }
+  }
+  closeModal('moBaanMeldingen');
+  if(fout) toast(fout+' melding(en) konden niet worden afgevinkt — ze komen de volgende keer terug', true);
+  await laadRollen();
+  if(document.getElementById('panel-banen').classList.contains('active')) renderBanenPanel();
 }
 
 /* =========================================================
@@ -3205,10 +3428,10 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   const naarLijst = !toernooiId;
   const kanKoppelen = !!toernooiId || (isToernooiAdmin() && SPELERSLIJST_AAN);
   // Koppelen zonder toernooi kan pas als de tabel voor de eigen spelerslijst
-  // bestaat (migratie-1.46.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
+  // bestaat (migratie-1.48.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
   // al bij het verlaten van het veld, anders lijkt het alsof er niets gebeurt.
   const kanNietKoppelen = wat => {
-    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.46.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
+    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.48.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
     return null;
   };
   const bekend = sp => beheerSpelers().some(x=>x.id===sp.id);
@@ -4032,8 +4255,8 @@ function renderBeheerSpelersPanel(){
     </div>
   </div>
   ${(ROLLEN_AAN && !SPELERSLIJST_AAN)?`<div class="db-melding" id="dbMelding"><b>Database nog niet bijgewerkt</b>${ta
-      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.46.0.sql</b> uit te voeren in Supabase.'
-      : 'Voer <b>migratie-1.46.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
+      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.48.0.sql</b> uit te voeren in Supabase.'
+      : 'Voer <b>migratie-1.48.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
   ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet de spelers van je eigen toernooien en de spelers die je zelf hebt toegevoegd. Van een speler die ook bij andere beheerders bekend is ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
   <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
   ${spelers.map(s=>{
@@ -4162,7 +4385,7 @@ function beheerdersKaartHtml(){
   if(!isSuperAdmin()) return '';
   if(!ROLLEN_AAN) return `<div class="card" style="margin-top:18px"><div class="cb">
       <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Toernooi Admins en samenvoegen</b>
-      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.46.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
+      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.48.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
     </div></div>`;
   return `<div class="card" style="margin-top:18px">
     <div class="ch"><div><div class="ct">Beheerders</div><div class="rm">Een Super Admin mag alles. Een Toernooi Admin beheert alleen zijn eigen en toegewezen toernooien.</div></div>
@@ -4287,7 +4510,7 @@ async function voerSamenvoegenUit(){
     if(knop) knop.disabled = false;
     const m = String(e.message||'');
     toast(/voeg_spelers_samen|PGRST202|schema cache/i.test(m) && !/scorekaart/i.test(m)
-      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.46.0.sql uit in Supabase.'
+      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.48.0.sql uit in Supabase.'
       : 'Samenvoegen niet uitgevoerd: '+m, true);
   }
 }
