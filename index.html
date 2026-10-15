@@ -139,6 +139,8 @@ tr:last-child td{border-bottom:none}
 .stl-locked{opacity:.45;pointer-events:none}
 .brow{display:flex;gap:8px;flex-wrap:wrap}
 
+/* weggevallen ronde in het klassement (v1.53.0) */
+.kls-weg{color:var(--tl);text-decoration:line-through;}
 /* TABS (sub-navigation within a panel, e.g. klassement netto/bruto) */
 .subtabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .subtab{flex-shrink:0;background:var(--wh);border:1.5px solid var(--cd);color:var(--tm);font-family:'Inter',sans-serif;font-size:.75rem;font-weight:600;padding:8px 14px;border-radius:20px;cursor:pointer;white-space:nowrap}
@@ -522,7 +524,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.52.0';
+const APP_VERSION = '1.53.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -569,7 +571,7 @@ let ROLLEN_AAN = false;
 // 'admin_spelers'): een bestaande speler die hij aan zijn lijst heeft gekoppeld
 // zonder dat die al aan een van zijn toernooien meedoet. Zo maakt het niet uit
 // of hij eerst zijn spelers of eerst zijn toernooi invoert. Bestaat de tabel
-// nog niet (migratie-1.52.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
+// nog niet (migratie-1.53.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
 // en kan koppelen alleen via een toernooi, zoals in v1.45.0.
 let allAdminSpelers = [];
 let SPELERSLIJST_AAN = false;
@@ -635,7 +637,7 @@ function magTeeBewerken(tee, baan){ return magBaanBewerken(baan) || (isToernooiA
 // bestaande tees wijzigen. Dat werkt door in elk toernooi dat die baan
 // gebruikt, dus elke zo'n wijziging wordt vastgelegd (tabel 'baan_wijzigingen')
 // en de Super Admin krijgt er een melding van zodra hij de app opent. Bestaat
-// die tabel nog niet (migratie-1.52.0.sql niet gedraaid), dan blijft het zoals
+// die tabel nog niet (migratie-1.53.0.sql niet gedraaid), dan blijft het zoals
 // in v1.47: zonder melding geen wijzigingen aan andermans baan.
 // De naam van de baan wijzigen en iets verwijderen blijft voorbehouden aan de
 // Super Admin en aan wie de baan (of tee) zelf heeft ingevoerd.
@@ -1174,6 +1176,11 @@ alter table scores add column if not exists ph_handmatig int;
 -- 2e. Maximum playing handicap per toernooi (sinds v1.52.0). Leeg = geen maximum.
 alter table toernooien add column if not exists max_playing_hcp int;
 
+-- 2f. Slechtste rondes laten vallen (sinds v1.53.0): hoeveel rondes per speler
+--     wegvallen in het Stableford-klassement, en rondes die altijd meetellen.
+alter table toernooien add column if not exists wegval_rondes int not null default 0;
+alter table toernooi_rondes add column if not exists telt_altijd boolean not null default false;
+
 -- 3. Wie iets heeft aangemaakt. Leeg bij alles wat al bestond (= van de Super Admin).
 --    Bepaalt wat een Toernooi Admin mag bewerken of verwijderen.
 alter table toernooien add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
@@ -1494,26 +1501,29 @@ async function laadRollen(){
   }
   // Een rol die de Super Admin intussen heeft gewijzigd geldt meteen.
   if(ingelogdAdmin){ const vers = allAdmins.find(a=>a.id===ingelogdAdmin.id); if(vers) ingelogdAdmin = vers; }
-  // Eigen spelerslijsten van Toernooi Admins (migratie-1.52.0.sql).
+  // Eigen spelerslijsten van Toernooi Admins (migratie-1.53.0.sql).
   if(ROLLEN_AAN){
     try{ allAdminSpelers = await sbG('admin_spelers','') || []; SPELERSLIJST_AAN = true; }
     catch(e){ allAdminSpelers = []; SPELERSLIJST_AAN = false; }
   } else { allAdminSpelers = []; SPELERSLIJST_AAN = false; }
   // Wijzigingen van Toernooi Admins aan banen van anderen die de Super Admin
-  // nog niet heeft gezien (migratie-1.52.0.sql).
+  // nog niet heeft gezien (migratie-1.53.0.sql).
   if(ROLLEN_AAN){
     try{ allBaanWijzigingen = await sbG('baan_wijzigingen','gezien_op=is.null&order=created_at.desc') || []; BAANLOG_AAN = true; }
     catch(e){ allBaanWijzigingen = []; BAANLOG_AAN = false; }
   } else { allBaanWijzigingen = []; BAANLOG_AAN = false; }
   // Handmatige playing handicap per kaart (kolom scores.ph_handmatig,
-  // migratie-1.52.0.sql). Bestaat de kolom niet, dan mislukt deze proef en
+  // migratie-1.53.0.sql). Bestaat de kolom niet, dan mislukt deze proef en
   // blijft de knop "Handicaps" een uitleg tonen.
   try{ await sbG('scores','select=ph_handmatig&limit=1'); PH_HANDMATIG_AAN = true; }
   catch(e){ PH_HANDMATIG_AAN = false; }
   // Maximum playing handicap per toernooi (kolom toernooien.max_playing_hcp,
-  // migratie-1.52.0.sql). Ontbreekt de kolom, dan geldt er geen maximum.
+  // migratie-1.53.0.sql). Ontbreekt de kolom, dan geldt er geen maximum.
   try{ await sbG('toernooien','select=max_playing_hcp&limit=1'); MAXPH_AAN = true; }
   catch(e){ MAXPH_AAN = false; }
+  // Slechtste rondes laten vallen (migratie-1.53.0.sql).
+  try{ await sbG('toernooien','select=wegval_rondes&limit=1'); await sbG('toernooi_rondes','select=telt_altijd&limit=1'); WEGVAL_AAN = true; }
+  catch(e){ WEGVAL_AAN = false; }
 }
 async function laadAlles(){
   await laadRollen();
@@ -2090,8 +2100,8 @@ function renderBanenPanel(){
   </div>
   ${(isSuperAdmin() && ROLLEN_AAN && allBaanWijzigingen.length)?`<div class="db-melding" id="baanMeldingBalk"><b>${allBaanWijzigingen.length===1?'1 wijziging':allBaanWijzigingen.length+' wijzigingen'} door een Toernooi Admin</b>Een Toernooi Admin heeft iets aangepast aan een baan die hij niet zelf heeft ingevoerd.<br><button class="btn bg bsm" onclick="openBaanMeldingen()">Bekijken</button></div>`:''}
   ${(ROLLEN_AAN && !BAANLOG_AAN)?`<div class="db-melding" id="baanDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
-    ? 'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
-    : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
+    ? 'Voer <b>migratie-1.53.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
+    : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.53.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
   <div id="banenLijst"></div>`;
   const lijst = document.getElementById('banenLijst');
   if(!allBanen.length){ lijst.innerHTML = '<div class="empty">Nog geen banen toegevoegd.</div>'; return; }
@@ -2573,7 +2583,8 @@ function scoreKentHcpVast(score){ return !!score && Object.prototype.hasOwnPrope
    latere wijziging van de exacte handicap. Leeg (null) = de app rekent zelf.
    Instellen gaat per ronde, met de knop "Handicaps" (openHandicapsModal). */
 let PH_HANDMATIG_AAN = false;
-let MAXPH_AAN = false;   // kolom toernooien.max_playing_hcp bestaat (v1.52.0)
+let MAXPH_AAN = false;
+let WEGVAL_AAN = false;  // kolommen toernooien.wegval_rondes en toernooi_rondes.telt_altijd bestaan (v1.53.0)   // kolom toernooien.max_playing_hcp bestaat (v1.52.0)
 function kaartPhHandmatig(score){
   return (score && score.ph_handmatig!=null && !isNaN(Number(score.ph_handmatig))) ? Number(score.ph_handmatig) : null;
 }
@@ -2724,7 +2735,7 @@ function renderBeheerToernooienPanel(){
       <div class="ch" style="cursor:pointer${open?'':';border-bottom:none'}" onclick="toggleToernooiCard('${t.id}')">
         <div style="display:flex;align-items:center">
           ${t.logo_data?`<img src="${t.logo_data}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;margin-right:8px">`:''}
-          <div><div class="ct">${esc(t.naam)}</div><div class="rm">${statusBadge(toernooiStatusAuto(t.id))} · allowance ${t.allowance_pct}%${t.max_playing_hcp!=null?' · max. PH '+t.max_playing_hcp:''}</div></div>
+          <div><div class="ct">${esc(t.naam)}</div><div class="rm">${statusBadge(toernooiStatusAuto(t.id))} · allowance ${t.allowance_pct}%${t.max_playing_hcp!=null?' · max. PH '+t.max_playing_hcp:''}${t.wegval_rondes>0?' · slechtste '+t.wegval_rondes+' valt weg':''}</div></div>
         </div>
         <span style="font-size:1.1rem;color:var(--tl);flex-shrink:0">${open?'▴':'▾'}</span>
       </div>
@@ -3171,7 +3182,10 @@ function openToernooiModal(id){
     <div class="fg"><label>Handicap-allowance <span class="hint">% van de course handicap dat als playing handicap telt</span></label><input type="number" id="tnAllowance" value="${t?t.allowance_pct:100}"></div>
     <div class="fg"><label>Maximum playing handicap <span class="hint">optioneel — leeg = geen maximum</span></label>${MAXPH_AAN
       ? `<input type="number" id="tnMaxPh" min="0" max="72" step="1" value="${t&&t.max_playing_hcp!=null?t.max_playing_hcp:''}" placeholder="bijv. 36">`
-      : `<div class="db-melding">${isSuperAdmin()?'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Dan kun je hier een maximum instellen.':'Een maximum instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'}</div>`}</div>
+      : `<div class="db-melding">${isSuperAdmin()?'Voer <b>migratie-1.53.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Dan kun je hier een maximum instellen.':'Een maximum instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.53.0.sql</b> uit te voeren in Supabase.'}</div>`}</div>
+    <div class="fg"><label>Slechtste rondes laten vallen <span class="hint">Stableford-klassement — 0 = alle rondes tellen. Een ronde die "altijd meetelt" (instelling per ronde) valt nooit weg.</span></label>${WEGVAL_AAN
+      ? `<input type="number" id="tnWegval" min="0" max="20" step="1" value="${t&&t.wegval_rondes?t.wegval_rondes:0}">`
+      : `<div class="db-melding">${isSuperAdmin()?'Voer <b>migratie-1.53.0.sql</b> uit in Supabase en open de app daarna opnieuw. Dan kun je hier rondes laten wegvallen.':'Rondes laten wegvallen kan nog niet. Vraag de Super Admin om <b>migratie-1.53.0.sql</b> uit te voeren in Supabase.'}</div>`}</div>
     <div class="brow"><button class="btn bp bf" onclick="saveToernooi(${t?`'${t.id}'`:'null'})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moToernooi')">Annuleren</button></div>
   `);
 }
@@ -3225,6 +3239,12 @@ async function saveToernooi(id){
   const max_playing_hcp = maxRuw==='' ? null : Number(maxRuw);
   if(max_playing_hcp!=null && (!Number.isInteger(max_playing_hcp) || max_playing_hcp<0 || max_playing_hcp>72)){ toast('Maximum playing handicap: een heel getal van 0 tot 72, of leeg', true); return; }
   const extra = MAXPH_AAN ? {max_playing_hcp} : {};
+  const wegVeld = document.getElementById('tnWegval');
+  if(wegVeld){
+    const w = wegVeld.value.trim()==='' ? 0 : Number(wegVeld.value);
+    if(!Number.isInteger(w) || w<0 || w>20){ toast('Slechtste rondes laten vallen: een heel getal van 0 tot 20', true); return; }
+    extra.wegval_rondes = w;
+  }
   if(id && !magToernooiBeheren(id)){ geenRechten(); return; }
   try{
     if(id) await sbPa('toernooien', id, {naam, beschrijving:beschrijving||null, allowance_pct, logo_data, ...extra});
@@ -3317,6 +3337,15 @@ function openRondeModal(toernooiId, rondeId){
         </label>
       </div>
     </div>
+    ${WEGVAL_AAN?`<div class="fg">
+      <label>Wegvallen <span class="hint">alleen van belang als het toernooi de slechtste ronde(s) laat vallen</span></label>
+      <div class="hh-grid">
+        <label class="hh-box${r&&r.telt_altijd?' aan':''}">
+          <input type="checkbox" class="hh-cb" id="rnTeltAltijd" ${r&&r.telt_altijd?'checked':''} onchange="this.closest('.hh-box').classList.toggle('aan', this.checked)">
+          <span>Telt altijd mee</span>
+        </label>
+      </div>
+    </div>`:''}
     <div class="brow"><button class="btn bp bf" onclick="saveRonde('${toernooiId}'${r?`,'${r.id}'`:''})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moRonde')">Annuleren</button></div>
   `);
   verversRondeSpelvormUI();
@@ -3395,7 +3424,8 @@ async function saveRonde(toernooiId, id){
   const scoring_types = (window._rnScoringTypes && window._rnScoringTypes.length) ? window._rnScoringTypes.slice() : ['stableford'];
   if(!naam || !combinatie_id){ toast('Vul naam en combinatie in', true); return; }
   const basis = {naam, datum, combinatie_id, volgorde, rapportage_label};
-  const uitgebreid = {...basis, spelvorm, boost_pct, hidden_holes, scoring_types};
+  const teltEl = document.getElementById('rnTeltAltijd');
+  const uitgebreid = {...basis, spelvorm, boost_pct, hidden_holes, scoring_types, ...((WEGVAL_AAN && teltEl) ? {telt_altijd: teltEl.checked} : {})};
   const muntjesEl = document.getElementById('rnMuntjes');
   const muntjes = !!(muntjesEl && muntjesEl.checked);
   const klassement_regulier = RONDE_SCORING_MET_KEUZE.includes(spelvorm) && window._rnKlsRegulier===true;
@@ -3514,8 +3544,8 @@ async function renderHandicapsBody(rondeId){
   const comb = combinatieById(ronde.combinatie_id);
   if(!PH_HANDMATIG_AAN){
     body.innerHTML = `<div class="db-melding" id="phDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
-      ? 'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Daarna kun je hier playing handicaps handmatig instellen.'
-      : 'Playing handicaps handmatig instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'}</div>
+      ? 'Voer <b>migratie-1.53.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Daarna kun je hier playing handicaps handmatig instellen.'
+      : 'Playing handicaps handmatig instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.53.0.sql</b> uit te voeren in Supabase.'}</div>
       <button class="btn bg bf" onclick="closeModal('moHandicaps')">Sluiten</button>`;
     return;
   }
@@ -3665,10 +3695,10 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   const naarLijst = !toernooiId;
   const kanKoppelen = !!toernooiId || (isToernooiAdmin() && SPELERSLIJST_AAN);
   // Koppelen zonder toernooi kan pas als de tabel voor de eigen spelerslijst
-  // bestaat (migratie-1.52.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
+  // bestaat (migratie-1.53.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
   // al bij het verlaten van het veld, anders lijkt het alsof er niets gebeurt.
   const kanNietKoppelen = wat => {
-    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.52.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
+    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.53.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
     return null;
   };
   const bekend = sp => beheerSpelers().some(x=>x.id===sp.id);
@@ -4479,8 +4509,8 @@ function renderBeheerSpelersPanel(){
     </div>
   </div>
   ${(ROLLEN_AAN && !SPELERSLIJST_AAN)?`<div class="db-melding" id="dbMelding"><b>Database nog niet bijgewerkt</b>${ta
-      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'
-      : 'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
+      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.53.0.sql</b> uit te voeren in Supabase.'
+      : 'Voer <b>migratie-1.53.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
   ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet de spelers van je eigen toernooien en de spelers die je zelf hebt toegevoegd. Van een speler die ook bij andere beheerders bekend is ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
   <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
   ${spelers.map(s=>{
@@ -4609,7 +4639,7 @@ function beheerdersKaartHtml(){
   if(!isSuperAdmin()) return '';
   if(!ROLLEN_AAN) return `<div class="card" style="margin-top:18px"><div class="cb">
       <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Toernooi Admins en samenvoegen</b>
-      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
+      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.53.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
     </div></div>`;
   return `<div class="card" style="margin-top:18px">
     <div class="ch"><div><div class="ct">Beheerders</div><div class="rm">Een Super Admin mag alles. Een Toernooi Admin beheert alleen zijn eigen en toegewezen toernooien.</div></div>
@@ -4734,7 +4764,7 @@ async function voerSamenvoegenUit(){
     if(knop) knop.disabled = false;
     const m = String(e.message||'');
     toast(/voeg_spelers_samen|PGRST202|schema cache/i.test(m) && !/scorekaart/i.test(m)
-      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.52.0.sql uit in Supabase.'
+      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.53.0.sql uit in Supabase.'
       : 'Samenvoegen niet uitgevoerd: '+m, true);
   }
 }
@@ -6621,6 +6651,32 @@ function klsKolomHeaderHtml(key, displayText, r0, toonSpelvormen, sorteerbaar, a
 // dezelfde onderliggende getallen als de cel()/totaal()-weergave in
 // tekenKlassementBody, maar puur numeriek (of null als niet compleet) zodat
 // er ook op gesorteerd kan worden.
+// SLECHTSTE RONDES LATEN VALLEN (sinds v1.53.0) — alleen het Stableford-
+// klassement. Eenheid is een klassementkolom (rondes met hetzelfde
+// rapportagelabel vallen samen weg of tellen samen mee). Een kolom telt
+// altijd mee als één van haar rondes 'telt_altijd' heeft. Meedoen in de
+// wegval-telling doen alleen kolommen waarin al gespeeld is (er staat
+// minstens één volledige kaart); wie zo'n kolom miste, heeft daar 0 punten.
+// Aantal dat wegvalt = het ingestelde aantal, maar nooit zoveel dat er geen
+// enkele gespeelde kolom meer overblijft om te tellen.
+// Zet per speler pl.weg = true op de weggevallen kolommen, en
+// totStableford = som van de overige. Geeft {aantal, ingesteld, altijd} terug.
+function pasWegvallenToe(toernooi, rondes, labels, rows){
+  const ingesteld = (WEGVAL_AAN && toernooi && Number(toernooi.wegval_rondes)>0) ? Number(toernooi.wegval_rondes) : 0;
+  const altijd = new Set(rondes.filter(r=>r.telt_altijd===true).map(rondeLabelKey));
+  if(!ingesteld) return {aantal:0, ingesteld:0, altijd};
+  const gespeeld = labels.filter(l=>rows.some(a=>a.perLabel[l] && a.perLabel[l].compleet));
+  const kandidaten = gespeeld.filter(l=>!altijd.has(l));
+  const aantal = Math.max(0, Math.min(ingesteld, kandidaten.length, gespeeld.length-1));
+  if(!aantal) return {aantal:0, ingesteld, altijd};
+  rows.forEach(a=>{
+    const waarde = l=>{ const pl = a.perLabel[l]; return (pl && pl.compleet) ? pl.klassement : 0; };
+    // laagste eerst; bij gelijke stand valt de vroegste kolom weg
+    const weg = kandidaten.map((l,i)=>({l, v:waarde(l), i})).sort((x,y)=>x.v-y.v || x.i-y.i).slice(0, aantal);
+    weg.forEach(w=>{ if(a.perLabel[w.l]) a.perLabel[w.l].weg = true; a.totStableford -= w.v; });
+  });
+  return {aantal, ingesteld, altijd};
+}
 function klsCelWaarde(pl, mode){
   if(!pl || !pl.compleet) return null;
   if(mode==='stableford') return pl.stableford;
@@ -6702,6 +6758,7 @@ async function tekenKlassementBody(toernooiId, mode){
     if(!agg.laatsteScore || r.volgorde >= (rondeMap[agg.laatsteScore.ronde_id]?.volgorde ?? -Infinity)) agg.laatsteScore = s;
   });
   let rows = Object.values(perSpeler).filter(a=>a.aantalRondes>0);
+  const wegval = pasWegvallenToe(toernooiById(toernooiId), rondes, labels, rows);
   // (Teams met al ingevulde muntjes mag wél door: die tellen ook zonder complete kaart.)
   if(!rows.length && !(mode==='teams' && muntjesRijen.length)){ body.innerHTML = `<div class="empty">${admin?'Nog geen scores ingevoerd.':'Nog geen volledige kaarten in gesloten rondes.'}</div>`; return; }
 
@@ -6730,7 +6787,10 @@ async function tekenKlassementBody(toernooiId, mode){
   function cel(pl, label){
     if(!pl) return '<span style="color:var(--tl)">—</span>';
     if(!pl.compleet) return '<span style="color:var(--tl)">bezig</span>';
-    if(mode==='stableford') return klsRegLabels.has(label) ? klsPaarHtml(pl.stableford, pl.klassement) : fmtPts(pl.stableford);
+    if(mode==='stableford'){
+      const w = klsRegLabels.has(label) ? klsPaarHtml(pl.stableford, pl.klassement) : fmtPts(pl.stableford);
+      return pl.weg ? `<span class="kls-weg" title="Valt weg — telt niet mee in het totaal">(${w})</span>` : w;
+    }
     if(mode==='abs-netto') return pl.absNetto;
     if(mode==='abs-bruto') return pl.absBruto;
     if(mode==='strokeplay-netto') return pl.strokeplayNetto;
@@ -6759,7 +6819,8 @@ async function tekenKlassementBody(toernooiId, mode){
     ${labels.map(l=>{
       const r0 = rondes.find(r=>rondeLabelKey(r)===l);
       const paar = mode==='stableford' && klsRegLabels.has(l);
-      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, paar?'klassement: regulier':'', paar?KLS_PAAR_MIN_BREEDTE:0);
+      const altijd = mode==='stableford' && wegval.aantal>0 && wegval.altijd.has(l);
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, [paar?'klassement: regulier':'', altijd?'telt altijd':''], paar?KLS_PAAR_MIN_BREEDTE:0);
     }).join('')}
     <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
@@ -6778,7 +6839,7 @@ async function tekenKlassementBody(toernooiId, mode){
     </tr>`;
   }).join('')}
   </tbody></table></div>
-  ${mode==='stableford'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">Cijfers zijn netto Stableford-punten per kolom. Hoogste totaal wint.</p>':''}
+  ${mode==='stableford'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">Cijfers zijn netto Stableford-punten per kolom. Hoogste totaal wint.</p>':''}${(mode==='stableford' && wegval.aantal>0)?`<p style="font-size:.72rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:4px">De slechtste ${wegval.aantal===1?'ronde valt':wegval.aantal+' rondes vallen'} weg${wegval.altijd.size?' (behalve '+[...wegval.altijd].map(l=>labelText[l]).join(', ')+': die '+(wegval.altijd.size===1?'telt':'tellen')+' altijd mee)':''}. Weggevallen scores staan tussen haakjes. Wie een ronde niet speelde, heeft daar 0 punten: die valt dan als eerste weg.${wegval.aantal<wegval.ingesteld?' Er zijn nog te weinig rondes gespeeld om er '+wegval.ingesteld+' te laten vallen; nu '+(wegval.aantal===1?'valt er 1':'vallen er '+wegval.aantal)+' weg.':''}</p>`:''}
   ${(mode==='stableford' && klsRegLabels.size)?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:4px">Bij een ronde met "klassement: regulier" staan er twee cijfers: vóór de schuine streep de ronde-uitslag volgens de afwijkende scoring, erachter de volledige, reguliere score van die ronde — die telt in het totaal. Sorteren op zo\'n ronde gaat op de ronde-uitslag.</p>':''}
   ${mode==='abs-netto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">ABS (adjusted) netto strokeplay: score per hole gemaximeerd op het punt waarop nog precies 0 stablefordpunten worden gehaald (bijv. par 5 met 1 slag mee → max. 8), min playing handicap. Laagste totaal wint.</p>':''}
   ${mode==='abs-bruto'?'<p style="font-size:.72rem;color:var(--tl);font-family:\'Inter\',sans-serif;margin-top:8px">ABS (adjusted) bruto strokeplay: score per hole gemaximeerd op het punt waarop nog precies 0 stablefordpunten worden gehaald. Laagste totaal wint.</p>':''}
