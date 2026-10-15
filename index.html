@@ -524,7 +524,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.53.0';
+const APP_VERSION = '1.53.1';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -6819,8 +6819,7 @@ async function tekenKlassementBody(toernooiId, mode){
     ${labels.map(l=>{
       const r0 = rondes.find(r=>rondeLabelKey(r)===l);
       const paar = mode==='stableford' && klsRegLabels.has(l);
-      const altijd = mode==='stableford' && wegval.aantal>0 && wegval.altijd.has(l);
-      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, [paar?'klassement: regulier':'', altijd?'telt altijd':''], paar?KLS_PAAR_MIN_BREEDTE:0);
+      return klsKolomHeaderHtml(l, labelText[l], r0, toonSpelvormen, true, sortLabelActief===l, paar?'klassement: regulier':'', paar?KLS_PAAR_MIN_BREEDTE:0);
     }).join('')}
     <th onclick="klsSorteerOpTotaal()" title="Sorteer op totaal" style="text-align:center;vertical-align:top;width:78px;white-space:normal;cursor:pointer;${!sortLabelActief?'color:var(--gold);font-weight:800;box-shadow:inset 0 -3px 0 var(--gold);':''}">Totaal</th>
   </tr></thead><tbody>
