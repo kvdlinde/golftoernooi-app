@@ -522,7 +522,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.51.0';
+const APP_VERSION = '1.52.0';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -569,7 +569,7 @@ let ROLLEN_AAN = false;
 // 'admin_spelers'): een bestaande speler die hij aan zijn lijst heeft gekoppeld
 // zonder dat die al aan een van zijn toernooien meedoet. Zo maakt het niet uit
 // of hij eerst zijn spelers of eerst zijn toernooi invoert. Bestaat de tabel
-// nog niet (migratie-1.50.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
+// nog niet (migratie-1.52.0.sql niet gedraaid), dan blijft SPELERSLIJST_AAN uit
 // en kan koppelen alleen via een toernooi, zoals in v1.45.0.
 let allAdminSpelers = [];
 let SPELERSLIJST_AAN = false;
@@ -635,7 +635,7 @@ function magTeeBewerken(tee, baan){ return magBaanBewerken(baan) || (isToernooiA
 // bestaande tees wijzigen. Dat werkt door in elk toernooi dat die baan
 // gebruikt, dus elke zo'n wijziging wordt vastgelegd (tabel 'baan_wijzigingen')
 // en de Super Admin krijgt er een melding van zodra hij de app opent. Bestaat
-// die tabel nog niet (migratie-1.50.0.sql niet gedraaid), dan blijft het zoals
+// die tabel nog niet (migratie-1.52.0.sql niet gedraaid), dan blijft het zoals
 // in v1.47: zonder melding geen wijzigingen aan andermans baan.
 // De naam van de baan wijzigen en iets verwijderen blijft voorbehouden aan de
 // Super Admin en aan wie de baan (of tee) zelf heeft ingevoerd.
@@ -692,13 +692,29 @@ function courseHandicap(exactHcp, slope, courseRating, par){
   const ch = parseFloat(exactHcp) * (slope/113) + (courseRating - par);
   return Math.round(ch);
 }
-// Playing Handicap = Course Handicap x toernooi-allowance% (default 100)
-function playingHandicap(exactHcp, tee, allowancePct){
+// Playing Handicap = Course Handicap x toernooi-allowance% (default 100).
+// Sinds v1.52.0 volgens de WHS-aanbeveling: de allowance gaat over de NIET
+// afgeronde course handicap; pas het resultaat wordt afgerond. (Tot v1.51.0
+// werd de course handicap eerst afgerond; dat gaf soms 1 slag verschil.)
+// Daarna eventueel begrensd op het maximum van het toernooi (max_playing_hcp).
+// 'regel' is een toernooi-object ({allowance_pct, max_playing_hcp}) of, zoals
+// vroeger, alleen het allowance-percentage.
+function courseHandicapOnafgerond(exactHcp, slope, courseRating, par){
+  if(exactHcp==null || slope==null || courseRating==null || par==null) return null;
+  return parseFloat(exactHcp) * (slope/113) + (courseRating - par);
+}
+function hcpRegel(regel){
+  if(regel!=null && typeof regel==='object') return { pct: regel.allowance_pct==null?100:Number(regel.allowance_pct), max: (regel.max_playing_hcp==null||regel.max_playing_hcp==='')?null:Number(regel.max_playing_hcp) };
+  return { pct: regel==null?100:Number(regel), max: null };
+}
+function playingHandicap(exactHcp, tee, regel){
   if(!tee) return null;
-  const ch = courseHandicap(exactHcp, tee.slope_rating, tee.course_rating, tee.par);
-  if(ch==null) return null;
-  const pct = (allowancePct==null?100:allowancePct)/100;
-  return Math.round(ch*pct);
+  const ch = courseHandicapOnafgerond(exactHcp, tee.slope_rating, tee.course_rating, tee.par);
+  if(ch==null || isNaN(ch)) return null;
+  const r = hcpRegel(regel);
+  let ph = Math.round(ch*r.pct/100);
+  if(r.max!=null && !isNaN(r.max) && ph>r.max) ph = r.max;
+  return ph;
 }
 
 /* ---------- FORMATTERS ---------- */
@@ -1155,6 +1171,9 @@ drop policy if exists "allow all" on baan_wijzigingen; create policy "allow all"
 --     de playing handicap zelf uit te rekenen. Leeg = de app rekent zelf.
 alter table scores add column if not exists ph_handmatig int;
 
+-- 2e. Maximum playing handicap per toernooi (sinds v1.52.0). Leeg = geen maximum.
+alter table toernooien add column if not exists max_playing_hcp int;
+
 -- 3. Wie iets heeft aangemaakt. Leeg bij alles wat al bestond (= van de Super Admin).
 --    Bepaalt wat een Toernooi Admin mag bewerken of verwijderen.
 alter table toernooien add column if not exists aangemaakt_door uuid references admins(id) on delete set null;
@@ -1475,22 +1494,26 @@ async function laadRollen(){
   }
   // Een rol die de Super Admin intussen heeft gewijzigd geldt meteen.
   if(ingelogdAdmin){ const vers = allAdmins.find(a=>a.id===ingelogdAdmin.id); if(vers) ingelogdAdmin = vers; }
-  // Eigen spelerslijsten van Toernooi Admins (migratie-1.50.0.sql).
+  // Eigen spelerslijsten van Toernooi Admins (migratie-1.52.0.sql).
   if(ROLLEN_AAN){
     try{ allAdminSpelers = await sbG('admin_spelers','') || []; SPELERSLIJST_AAN = true; }
     catch(e){ allAdminSpelers = []; SPELERSLIJST_AAN = false; }
   } else { allAdminSpelers = []; SPELERSLIJST_AAN = false; }
   // Wijzigingen van Toernooi Admins aan banen van anderen die de Super Admin
-  // nog niet heeft gezien (migratie-1.50.0.sql).
+  // nog niet heeft gezien (migratie-1.52.0.sql).
   if(ROLLEN_AAN){
     try{ allBaanWijzigingen = await sbG('baan_wijzigingen','gezien_op=is.null&order=created_at.desc') || []; BAANLOG_AAN = true; }
     catch(e){ allBaanWijzigingen = []; BAANLOG_AAN = false; }
   } else { allBaanWijzigingen = []; BAANLOG_AAN = false; }
   // Handmatige playing handicap per kaart (kolom scores.ph_handmatig,
-  // migratie-1.50.0.sql). Bestaat de kolom niet, dan mislukt deze proef en
+  // migratie-1.52.0.sql). Bestaat de kolom niet, dan mislukt deze proef en
   // blijft de knop "Handicaps" een uitleg tonen.
   try{ await sbG('scores','select=ph_handmatig&limit=1'); PH_HANDMATIG_AAN = true; }
   catch(e){ PH_HANDMATIG_AAN = false; }
+  // Maximum playing handicap per toernooi (kolom toernooien.max_playing_hcp,
+  // migratie-1.52.0.sql). Ontbreekt de kolom, dan geldt er geen maximum.
+  try{ await sbG('toernooien','select=max_playing_hcp&limit=1'); MAXPH_AAN = true; }
+  catch(e){ MAXPH_AAN = false; }
 }
 async function laadAlles(){
   await laadRollen();
@@ -2067,8 +2090,8 @@ function renderBanenPanel(){
   </div>
   ${(isSuperAdmin() && ROLLEN_AAN && allBaanWijzigingen.length)?`<div class="db-melding" id="baanMeldingBalk"><b>${allBaanWijzigingen.length===1?'1 wijziging':allBaanWijzigingen.length+' wijzigingen'} door een Toernooi Admin</b>Een Toernooi Admin heeft iets aangepast aan een baan die hij niet zelf heeft ingevoerd.<br><button class="btn bg bsm" onclick="openBaanMeldingen()">Bekijken</button></div>`:''}
   ${(ROLLEN_AAN && !BAANLOG_AAN)?`<div class="db-melding" id="baanDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
-    ? 'Voer <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
-    : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.50.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
+    ? 'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
+    : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
   <div id="banenLijst"></div>`;
   const lijst = document.getElementById('banenLijst');
   if(!allBanen.length){ lijst.innerHTML = '<div class="empty">Nog geen banen toegevoegd.</div>'; return; }
@@ -2550,6 +2573,7 @@ function scoreKentHcpVast(score){ return !!score && Object.prototype.hasOwnPrope
    latere wijziging van de exacte handicap. Leeg (null) = de app rekent zelf.
    Instellen gaat per ronde, met de knop "Handicaps" (openHandicapsModal). */
 let PH_HANDMATIG_AAN = false;
+let MAXPH_AAN = false;   // kolom toernooien.max_playing_hcp bestaat (v1.52.0)
 function kaartPhHandmatig(score){
   return (score && score.ph_handmatig!=null && !isNaN(Number(score.ph_handmatig))) ? Number(score.ph_handmatig) : null;
 }
@@ -2700,7 +2724,7 @@ function renderBeheerToernooienPanel(){
       <div class="ch" style="cursor:pointer${open?'':';border-bottom:none'}" onclick="toggleToernooiCard('${t.id}')">
         <div style="display:flex;align-items:center">
           ${t.logo_data?`<img src="${t.logo_data}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;margin-right:8px">`:''}
-          <div><div class="ct">${esc(t.naam)}</div><div class="rm">${statusBadge(toernooiStatusAuto(t.id))} · allowance ${t.allowance_pct}%</div></div>
+          <div><div class="ct">${esc(t.naam)}</div><div class="rm">${statusBadge(toernooiStatusAuto(t.id))} · allowance ${t.allowance_pct}%${t.max_playing_hcp!=null?' · max. PH '+t.max_playing_hcp:''}</div></div>
         </div>
         <span style="font-size:1.1rem;color:var(--tl);flex-shrink:0">${open?'▴':'▾'}</span>
       </div>
@@ -3145,6 +3169,9 @@ function openToernooiModal(id){
       <div id="tnLogoPreview" style="margin-top:8px">${window._tnLogoData?`<img src="${window._tnLogoData}" style="max-height:70px;border-radius:8px;display:block;margin-bottom:6px"><a href="#" onclick="event.preventDefault();verwijderToernooiLogo()">Logo verwijderen</a>`:''}</div>
     </div>
     <div class="fg"><label>Handicap-allowance <span class="hint">% van de course handicap dat als playing handicap telt</span></label><input type="number" id="tnAllowance" value="${t?t.allowance_pct:100}"></div>
+    <div class="fg"><label>Maximum playing handicap <span class="hint">optioneel — leeg = geen maximum</span></label>${MAXPH_AAN
+      ? `<input type="number" id="tnMaxPh" min="0" max="72" step="1" value="${t&&t.max_playing_hcp!=null?t.max_playing_hcp:''}" placeholder="bijv. 36">`
+      : `<div class="db-melding">${isSuperAdmin()?'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Dan kun je hier een maximum instellen.':'Een maximum instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'}</div>`}</div>
     <div class="brow"><button class="btn bp bf" onclick="saveToernooi(${t?`'${t.id}'`:'null'})">Opslaan</button><button class="btn bg bf" onclick="closeModal('moToernooi')">Annuleren</button></div>
   `);
 }
@@ -3193,11 +3220,16 @@ async function saveToernooi(id){
   const allowance_pct = parseFloat(document.getElementById('tnAllowance').value);
   const logo_data = window._tnLogoData || null;
   if(!naam || isNaN(allowance_pct)){ toast('Vul naam en allowance in', true); return; }
+  const maxVeld = document.getElementById('tnMaxPh');
+  const maxRuw = maxVeld ? maxVeld.value.trim() : '';
+  const max_playing_hcp = maxRuw==='' ? null : Number(maxRuw);
+  if(max_playing_hcp!=null && (!Number.isInteger(max_playing_hcp) || max_playing_hcp<0 || max_playing_hcp>72)){ toast('Maximum playing handicap: een heel getal van 0 tot 72, of leeg', true); return; }
+  const extra = MAXPH_AAN ? {max_playing_hcp} : {};
   if(id && !magToernooiBeheren(id)){ geenRechten(); return; }
   try{
-    if(id) await sbPa('toernooien', id, {naam, beschrijving:beschrijving||null, allowance_pct, logo_data});
+    if(id) await sbPa('toernooien', id, {naam, beschrijving:beschrijving||null, allowance_pct, logo_data, ...extra});
     else {
-      const nieuw = await sbP('toernooien', metMaker({naam, beschrijving:beschrijving||null, allowance_pct, logo_data}));
+      const nieuw = await sbP('toernooien', metMaker({naam, beschrijving:beschrijving||null, allowance_pct, logo_data, ...extra}));
       // Een Toernooi Admin beheert het toernooi dat hij zelf aanmaakt meteen.
       if(isToernooiAdmin() && nieuw && nieuw[0]) await sbP('toernooi_admins', {toernooi_id: nieuw[0].id, admin_id: ingelogdAdmin.id});
     }
@@ -3442,7 +3474,7 @@ async function herberekenRondeScores(rondeId){
     const tee = teeById(score.tee_id);
     const speler = allSpelers.find(s=>s.id===score.speler_id);
     if(!tee || !speler) continue;
-    const hcp = kaartHcp(score, speler, tee, toernooi.allowance_pct);
+    const hcp = kaartHcp(score, speler, tee, toernooi);
     const freshPH = hcp.pH;
     const uitkomst = berekenScore(score.hole_scores, holes, freshPH);
     const gewijzigd = score.playing_hcp!==freshPH || score.stableford!==uitkomst.stableford ||
@@ -3482,8 +3514,8 @@ async function renderHandicapsBody(rondeId){
   const comb = combinatieById(ronde.combinatie_id);
   if(!PH_HANDMATIG_AAN){
     body.innerHTML = `<div class="db-melding" id="phDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
-      ? 'Voer <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Daarna kun je hier playing handicaps handmatig instellen.'
-      : 'Playing handicaps handmatig instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.50.0.sql</b> uit te voeren in Supabase.'}</div>
+      ? 'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Daarna kun je hier playing handicaps handmatig instellen.'
+      : 'Playing handicaps handmatig instellen kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'}</div>
       <button class="btn bg bf" onclick="closeModal('moHandicaps')">Sluiten</button>`;
     return;
   }
@@ -3499,7 +3531,7 @@ async function renderHandicapsBody(rondeId){
     // De tee van zijn kaart; heeft hij nog niet gekozen en is er maar één tee,
     // dan die. Anders valt er nog niets uit te rekenen.
     const tee = (sc && sc.tee_id) ? teeById(sc.tee_id) : (tees.length===1 ? tees[0] : null);
-    const berekend = tee ? kaartHcp(sc ? {...sc, ph_handmatig:null} : null, sp, tee, toernooi.allowance_pct).pH : null;
+    const berekend = tee ? kaartHcp(sc ? {...sc, ph_handmatig:null} : null, sp, tee, toernooi).pH : null;
     const hand = kaartPhHandmatig(sc);
     return `<tr data-id="${sp.id}">
       <td><b>${esc(sp.naam)}</b><div class="rm">hcp ${fH(sp.exact_hcp)}${tee?' · tee '+esc(tee.kleur):''}</div></td>
@@ -3554,7 +3586,7 @@ async function saveHandicaps(rondeId){
         // Bestaande kaart: handicap zetten (of weghalen) en de kaart meteen
         // opnieuw doorrekenen met de handicap die daarna geldt.
         const tee = w.sc.tee_id ? teeById(w.sc.tee_id) : null;
-        const pH = kaartHcp({...w.sc, ph_handmatig: w.waarde}, sp, tee, toernooi.allowance_pct).pH;
+        const pH = kaartHcp({...w.sc, ph_handmatig: w.waarde}, sp, tee, toernooi).pH;
         const velden = {ph_handmatig: w.waarde, playing_hcp: pH, updated_at: nu};
         if(Array.isArray(w.sc.hole_scores) && holes){
           const u = scOfficieleUitkomst(w.sc.hole_scores, holes, pH);
@@ -3633,10 +3665,10 @@ async function koppelOfMaakSpeler(toernooiId, naamRuw, opties){
   const naarLijst = !toernooiId;
   const kanKoppelen = !!toernooiId || (isToernooiAdmin() && SPELERSLIJST_AAN);
   // Koppelen zonder toernooi kan pas als de tabel voor de eigen spelerslijst
-  // bestaat (migratie-1.50.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
+  // bestaat (migratie-1.52.0.sql). Ontbreekt die, zeg dat dan duidelijk — ook
   // al bij het verlaten van het veld, anders lijkt het alsof er niets gebeurt.
   const kanNietKoppelen = wat => {
-    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.50.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
+    toast(wat+' staat al in Rondje!, maar koppelen zonder toernooi kan nog niet: de database is nog niet bijgewerkt. De Super Admin moet eerst migratie-1.52.0.sql uitvoeren in Supabase. Tot dan: kies een toernooi, of voeg de speler toe via "+ Deelnemer".', true);
     return null;
   };
   const bekend = sp => beheerSpelers().some(x=>x.id===sp.id);
@@ -4447,8 +4479,8 @@ function renderBeheerSpelersPanel(){
     </div>
   </div>
   ${(ROLLEN_AAN && !SPELERSLIJST_AAN)?`<div class="db-melding" id="dbMelding"><b>Database nog niet bijgewerkt</b>${ta
-      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.50.0.sql</b> uit te voeren in Supabase.'
-      : 'Voer <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
+      ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.52.0.sql</b> uit te voeren in Supabase.'
+      : 'Voer <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
   ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet de spelers van je eigen toernooien en de spelers die je zelf hebt toegevoegd. Van een speler die ook bij andere beheerders bekend is ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
   <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
   ${spelers.map(s=>{
@@ -4577,7 +4609,7 @@ function beheerdersKaartHtml(){
   if(!isSuperAdmin()) return '';
   if(!ROLLEN_AAN) return `<div class="card" style="margin-top:18px"><div class="cb">
       <b style="font-family:'Inter',sans-serif;font-size:.85rem;color:var(--gd)">Toernooi Admins en samenvoegen</b>
-      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.50.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
+      <p style="font-size:.78rem;color:var(--tl);font-family:'Inter',sans-serif;margin-top:6px">Om Toernooi Admins toe te voegen en dubbele spelers samen te voegen, voer je eerst eenmalig het bestand <b>migratie-1.52.0.sql</b> uit in Supabase (SQL Editor). Tot dan werkt alles zoals voorheen.</p>
     </div></div>`;
   return `<div class="card" style="margin-top:18px">
     <div class="ch"><div><div class="ct">Beheerders</div><div class="rm">Een Super Admin mag alles. Een Toernooi Admin beheert alleen zijn eigen en toegewezen toernooien.</div></div>
@@ -4702,7 +4734,7 @@ async function voerSamenvoegenUit(){
     if(knop) knop.disabled = false;
     const m = String(e.message||'');
     toast(/voeg_spelers_samen|PGRST202|schema cache/i.test(m) && !/scorekaart/i.test(m)
-      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.50.0.sql uit in Supabase.'
+      ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.52.0.sql uit in Supabase.'
       : 'Samenvoegen niet uitgevoerd: '+m, true);
   }
 }
@@ -5172,7 +5204,7 @@ function renderProfielPanel(){
   <div class="card"><div class="ch"><div class="ct">Hoe werkt mijn playing handicap?</div></div>
     <div class="cb" style="font-size:.82rem;color:var(--tm);font-family:'Inter',sans-serif;line-height:1.6">
       Course Handicap = exacte hcp × (Slope ÷ 113) + (Course Rating − Par).<br>
-      Playing Handicap = Course Handicap × de handicap-allowance van het toernooi.<br>
+      Playing Handicap = Course Handicap × de handicap-allowance van het toernooi, pas daarna afgerond. Heeft het toernooi een maximum, dan nooit hoger dan dat.<br>
       Dit wordt per ronde automatisch berekend zodra je bij score invoeren je tee kiest.
     </div>
   </div>`;
@@ -5402,7 +5434,7 @@ function scVasteHcpInfoHtml(hcp, speler, tee, ctx){
     ? `Handicap van deze kaart (vastgelegd): ${fH(hcp.exact)} → playing hcp <b style="color:var(--gd)">${fPH(hcp.pH)}</b>`
     : `Playing hcp <b style="color:var(--gd)">${fPH(hcp.pH)}</b> — vastgelegd bij het sluiten van de ronde`;
   if(!isAdmin()) return basis;
-  const actueelPH = playingHandicap(speler.exact_hcp, tee, ctx.toernooi.allowance_pct);
+  const actueelPH = playingHandicap(speler.exact_hcp, tee, ctx.toernooi);
   const wijktAf = hcp.exact!=null ? Number(hcp.exact)!==Number(speler.exact_hcp) : actueelPH!==hcp.pH;
   if(!wijktAf) return basis;
   return basis + `<div style="margin-top:6px"><button class="btn bg bsm" onclick="scPasHuidigeHcpToe()">Huidige handicap (${fH(speler.exact_hcp)} → playing ${fPH(actueelPH)}) op deze kaart toepassen</button></div>`;
@@ -5417,7 +5449,7 @@ async function scPasHuidigeHcpToe(){
   const speler = allSpelers.find(s=>s.id===ctx.spelerId);
   const tee = teeById(document.getElementById('scTee').value);
   if(!speler || !tee) return;
-  const nieuwPH = playingHandicap(speler.exact_hcp, tee, ctx.toernooi.allowance_pct);
+  const nieuwPH = playingHandicap(speler.exact_hcp, tee, ctx.toernooi);
   if(!confirm('De handicap van deze kaart vervangen door de huidige handicap van '+speler.naam+' ('+fH(speler.exact_hcp)+', playing hcp '+fPH(nieuwPH)+')? De punten van deze kaart worden opnieuw berekend.')) return;
   try{
     const sc = ctx.existingScore;
@@ -5440,7 +5472,7 @@ function onTeeChange(){
   const speler = allSpelers.find(s=>s.id===ctx.spelerId);
   // Staat de handicap van deze kaart vast, dan rekent de kaart daarmee — niet
   // met de actuele handicap van de speler (zie kaartHcp).
-  const hcp = kaartHcp(ctx.existingScore, speler, tee, ctx.toernooi.allowance_pct);
+  const hcp = kaartHcp(ctx.existingScore, speler, tee, ctx.toernooi);
   ctx.currentPH = tee ? hcp.pH : null;
   const phEl = document.getElementById('scPHInfo');
   phEl.innerHTML = !tee ? 'Kies een tee om je playing handicap te zien.'
