@@ -146,7 +146,8 @@ tr:last-child td{border-bottom:none}
 .kls-weg{color:var(--tl);text-decoration:line-through;}
 /* handicap onder een rondescore in het klassement (v1.55.0) */
 .kls-hcp{font-family:'Inter',sans-serif;font-size:.62rem;font-weight:500;color:var(--tl);line-height:1.25;margin-top:1px}
-.kls-hcp span{display:block;white-space:nowrap}
+.kls-hcp span{white-space:nowrap}
+.kls-hcp i{font-style:normal}
 /* TABS (sub-navigation within a panel, e.g. klassement netto/bruto) */
 .subtabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .subtab{flex-shrink:0;background:var(--wh);border:1.5px solid var(--cd);color:var(--tm);font-family:'Inter',sans-serif;font-size:.75rem;font-weight:600;padding:8px 14px;border-radius:20px;cursor:pointer;white-space:nowrap}
@@ -532,7 +533,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.55.0';
+const APP_VERSION = '1.55.1';
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -6987,9 +6988,10 @@ async function tekenKlassementBody(toernooiId, mode){
     const basis = celBasis(pl, label);
     if(!pl || !pl.compleet || !(toonPh||toonEx) || !hcpModes.includes(mode) || !pl.hcpInfo || pl.scoreIds.length!==1) return basis;
     const delen = [];
-    if(toonPh && pl.hcpInfo.ph!=null) delen.push('ph '+fPH(pl.hcpInfo.ph));
     if(toonEx && pl.hcpInfo.ex!=null) delen.push('hcp '+fH(pl.hcpInfo.ex));
-    return delen.length ? `${basis}<div class="kls-hcp">${delen.map(d=>`<span>${d}</span>`).join(' ')}</div>` : basis;
+    if(toonPh && pl.hcpInfo.ph!=null) delen.push('ph '+fPH(pl.hcpInfo.ph));
+    // Op één regel ("hcp 9.1 · ph 8"); is de kolom te smal, dan breekt hij netjes tussen de twee.
+    return delen.length ? `${basis}<div class="kls-hcp">${delen.map(d=>`<span>${d}</span>`).join('<i> · </i>')}</div>` : basis;
   }
   function celBasis(pl, label){
     if(!pl) return '<span style="color:var(--tl)">—</span>';
