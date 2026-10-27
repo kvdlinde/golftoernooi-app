@@ -123,6 +123,7 @@ tr:last-child td{border-bottom:none}
 /* FORMS */
 .fg{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
 .fg label{font-size:.68rem;font-weight:600;color:var(--tm);letter-spacing:.04em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace}
+.fg select{padding-right:40px !important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%232E5E3F' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;background-repeat:no-repeat !important;background-position:right 14px center !important;cursor:pointer}
 .fg input,.fg select,.fg textarea{padding:12px 13px;border:1.5px solid var(--cd);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:1rem;color:var(--td);background:var(--cr);width:100%;-webkit-appearance:none}
 .fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--gl);background:var(--wh)}
 .fg .hint{font-size:.7rem;color:var(--tl);font-family:'Inter',sans-serif;font-weight:400;text-transform:none;letter-spacing:0}
@@ -148,6 +149,10 @@ tr:last-child td{border-bottom:none}
 .kls-hcp{font-family:'Inter',sans-serif;font-size:.62rem;font-weight:500;color:var(--tl);line-height:1.25;margin-top:1px}
 .kls-hcp span{white-space:nowrap}
 .kls-hcp i{font-style:normal}
+.zoekveld input{background:var(--wh) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='5' fill='none' stroke='%235F6B63' stroke-width='1.8'/%3E%3Cpath d='M11 11l3.5 3.5' stroke='%235F6B63' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat 13px center !important;padding-left:38px !important}
+.sp-filter{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+@media (max-width:560px){ .sp-filter{grid-template-columns:1fr} }
+.kls-toernooikeuze select{background-color:var(--wh) !important;border-color:var(--gm) !important;font-weight:600}
 /* TABS (sub-navigation within a panel, e.g. klassement netto/bruto) */
 .subtabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .subtab{flex-shrink:0;background:var(--wh);border:1.5px solid var(--cd);color:var(--tm);font-family:'Inter',sans-serif;font-size:.75rem;font-weight:600;padding:8px 14px;border-radius:20px;cursor:pointer;white-space:nowrap}
@@ -533,7 +538,8 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.55.1';
+const APP_VERSION = '1.56.0';
+try{ localStorage.removeItem('klassementToernooi'); }catch(e){}
 (function(){
   const el = document.getElementById('hdrSub');
   if(el) el.textContent = 'v'+APP_VERSION;
@@ -2116,6 +2122,27 @@ function toggleBaanCard(id){
   if(baanOpenIds.has(id)) baanOpenIds.delete(id); else baanOpenIds.add(id);
   renderBanenPanel();
 }
+// ZOEKEN IN BANEN (sinds v1.56.0): op naam en plaats van de baan en op de
+// namen van zijn lussen en combinaties. Hoofdletters, accenten en de volgorde
+// van de woorden maken niet uit.
+let banenZoekterm = '';
+function banenGefilterd(){
+  const termen = naamSleutel(banenZoekterm).split(' ').filter(Boolean);
+  if(!termen.length) return allBanen;
+  return allBanen.filter(b=>{
+    const hooi = [b.naam, b.locatie, ...allLussen.filter(l=>l.baan_id===b.id).map(l=>l.naam), ...allCombinaties.filter(c=>c.baan_id===b.id).map(c=>c.naam)]
+      .filter(Boolean).map(naamSleutel).join(' ');
+    return termen.every(t=>hooi.includes(t));
+  });
+}
+function zoekBanen(waarde){
+  banenZoekterm = waarde || '';
+  const veld = document.getElementById('banenZoek');
+  const pos = veld ? veld.selectionStart : null;
+  renderBanenPanel();
+  const nieuw = document.getElementById('banenZoek');
+  if(nieuw){ nieuw.focus(); if(pos!=null) try{ nieuw.setSelectionRange(pos,pos); }catch(e){} }
+}
 function renderBanenPanel(){
   const el = document.getElementById('panel-banen');
   el.innerHTML = `
@@ -2126,10 +2153,13 @@ function renderBanenPanel(){
   ${(ROLLEN_AAN && !BAANLOG_AAN)?`<div class="db-melding" id="baanDbMelding"><b>Database nog niet bijgewerkt</b>${isSuperAdmin()
     ? 'Voer <b>migratie-1.55.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin de holes en tees van een baan van een ander niet aanpassen.'
     : 'Holes en tees aanpassen van een baan die een ander heeft ingevoerd kan nog niet. Vraag de Super Admin om <b>migratie-1.55.0.sql</b> uit te voeren in Supabase.'}</div>`:''}
+  ${allBanen.length?`<div class="fg zoekveld"><input type="search" id="banenZoek" placeholder="Zoek een baan, lus of combinatie…" autocomplete="off" value="${esc(banenZoekterm)}" oninput="zoekBanen(this.value)"></div>`:''}
   <div id="banenLijst"></div>`;
   const lijst = document.getElementById('banenLijst');
   if(!allBanen.length){ lijst.innerHTML = '<div class="empty">Nog geen banen toegevoegd.</div>'; return; }
-  lijst.innerHTML = allBanen.map(baan=>{
+  const zichtbaar = banenGefilterd();
+  if(!zichtbaar.length){ lijst.innerHTML = '<div class="empty">Geen baan gevonden met "'+esc(banenZoekterm)+'".</div>'; return; }
+  lijst.innerHTML = zichtbaar.map(baan=>{
     const lussen = allLussen.filter(l=>l.baan_id===baan.id);
     const combs = allCombinaties.filter(c=>c.baan_id===baan.id);
     // Een lus van 18 holes staat al op zichzelf en krijgt automatisch een eigen
@@ -4602,13 +4632,44 @@ async function importeerStartlijst(){
 /* =========================================================
    SPELERSBEHEER (admin)
    ========================================================= */
+// FILTER OP TOERNOOI (sinds v1.56.0): bovenin kies je een toernooi; dan zie
+// je alleen de spelers die daaraan meedoen. De Super Admin kiest uit alle
+// toernooien, een Toernooi Admin uit die van hemzelf. Met het zoekveld ernaast
+// maak je de keuzelijst korter.
+let spelerToernooiFilter = '';
+let spelerToernooiZoek = '';
+function kiesSpelerToernooi(id){ spelerToernooiFilter = id || ''; spelerSelectie = new Set(); renderBeheerSpelersPanel(); }
+function zoekSpelerToernooi(waarde){
+  spelerToernooiZoek = waarde || '';
+  const sel = document.getElementById('spToernooiFilter');
+  if(!sel) return;
+  const termen = naamSleutel(spelerToernooiZoek).split(' ').filter(Boolean);
+  const passend = [];
+  Array.from(sel.options).forEach(o=>{
+    if(!o.value){ o.hidden = false; return; }
+    const ok = termen.every(t=>naamSleutel(o.textContent).includes(t));
+    o.hidden = !ok; if(ok) passend.push(o.value);
+  });
+  // Precies één toernooi past: meteen kiezen.
+  if(termen.length && passend.length===1 && spelerToernooiFilter!==passend[0]){
+    spelerToernooiFilter = passend[0]; spelerSelectie = new Set();
+    const pos = document.getElementById('spToernooiZoek').selectionStart;
+    renderBeheerSpelersPanel();
+    const z = document.getElementById('spToernooiZoek'); if(z){ z.focus(); try{ z.setSelectionRange(pos,pos); }catch(e){} }
+  }
+}
 function renderBeheerSpelersPanel(){
   const el = document.getElementById('panel-beheer-spelers');
   const ta = isToernooiAdmin();
-  const spelers = beheerSpelers();
+  const alleSpelers = beheerSpelers();
   const mijnIds = ta ? beheerToernooiIds() : null;
+  const keuzeToernooien = beheerToernooien().slice().sort((a,b)=>a.naam.localeCompare(b.naam));
+  if(spelerToernooiFilter && !keuzeToernooien.some(t=>t.id===spelerToernooiFilter)) spelerToernooiFilter = '';
+  const inFilter = spelerToernooiFilter ? new Set(allDeelnemers.filter(d=>d.toernooi_id===spelerToernooiFilter).map(d=>d.speler_id)) : null;
+  const spelers = inFilter ? alleSpelers.filter(sp=>inFilter.has(sp.id)) : alleSpelers;
+  const zoekTermen = naamSleutel(spelerToernooiZoek).split(' ').filter(Boolean);
   el.innerHTML = `
-  <div class="sh"><div><div class="st">Spelers</div><div class="ss">${spelers.length} spelers${ta?' in jouw lijst':''}</div></div>
+  <div class="sh"><div><div class="st">Spelers</div><div class="ss">${inFilter ? spelers.length+' van '+alleSpelers.length+' spelers' : alleSpelers.length+' spelers'}${ta?' in jouw lijst':''}</div></div>
     <div class="brow">
       ${ta?'':`<button class="btn bd bsm" id="spVerwijderKnop" style="display:none" onclick="verwijderGekozenSpelers()">Verwijderen</button>`}
       ${ta?'':`<button class="btn bg bsm" onclick="resetAllePincodes()">Alle pincodes op 0000</button>`}
@@ -4620,7 +4681,15 @@ function renderBeheerSpelersPanel(){
       ? 'Een bestaande speler aan je lijst toevoegen zonder toernooi kan nog niet. Vraag de Super Admin om <b>migratie-1.55.0.sql</b> uit te voeren in Supabase.'
       : 'Voer <b>migratie-1.55.0.sql</b> uit in Supabase (SQL Editor → New query → plakken → Run) en open de app daarna opnieuw. Tot dan kan een Toernooi Admin een bestaande speler alleen via een toernooi koppelen.'}</div>`:''}
   ${ta?`<p style="font-size:.76rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Je ziet de spelers van je eigen toernooien en de spelers die je zelf hebt toegevoegd. Van een speler die ook bij andere beheerders bekend is ("gedeeld") kun je alleen de handicap aanpassen.</p>`:''}
-  <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Toernooien</th><th>Acties</th></tr></thead><tbody>
+  ${keuzeToernooien.length?`<div class="sp-filter">
+    <div class="fg"><label>Toernooi <span class="hint">toon alleen de spelers van één toernooi</span></label>
+      <select id="spToernooiFilter" onchange="kiesSpelerToernooi(this.value)">
+        <option value="">Alle spelers</option>
+        ${keuzeToernooien.map(t=>`<option value="${t.id}" ${t.id===spelerToernooiFilter?'selected':''} ${(zoekTermen.length && !zoekTermen.every(z=>naamSleutel(t.naam).includes(z)) && t.id!==spelerToernooiFilter)?'hidden':''}>${esc(t.naam)}</option>`).join('')}
+      </select></div>
+    <div class="fg"><label>Zoek toernooi</label><input type="search" id="spToernooiZoek" placeholder="Typ een deel van de naam…" autocomplete="off" value="${esc(spelerToernooiZoek)}" oninput="zoekSpelerToernooi(this.value)"></div>
+  </div>`:''}
+  <div class="tw"><table class="spelerstabel"><thead><tr><th>${(!ta && spelers.length)?`<label class="sp-kiesalles"><input type="checkbox" id="spKiesAlles" onchange="spelerKiesAlles(this.checked)" title="Alle spelers aanvinken"> Naam</label>`:'Naam'}</th><th>Hcp</th><th>Status</th><th>Acties</th></tr></thead><tbody>
   ${spelers.map(s=>{
     const toern = allDeelnemers.filter(d=>d.speler_id===s.id && (!mijnIds || mijnIds.has(d.toernooi_id))).map(d=>toernooiById(d.toernooi_id)).filter(Boolean);
     const eigen = !ta || spelerUitsluitendEigen(s.id);
@@ -4632,10 +4701,6 @@ function renderBeheerSpelersPanel(){
     <td>${ta?'':`<div class="sp-naamrij"><input type="checkbox" class="sp-kies" data-id="${s.id}" ${spelerSelectie.has(s.id)?'checked':''} onchange="spelerKies('${s.id}', this.checked)" aria-label="${esc(s.naam)} aanvinken"><div>`}<b>${esc(s.naam)}</b>${!eigen?' <span class="sp s-gedeeld" title="Doet ook mee aan toernooien van andere beheerders">gedeeld</span>':''}${(eigen && s.email)?`<div class="rm">${esc(s.email)}</div>`:''}${ta?'':'</div></div>'}</td>
     <td>${fH(s.exact_hcp)}</td>
     <td>${s.actief!==false?'<span class="sp so">actief</span>':'<span class="sp sg">inactief</span>'}</td>
-    <td>${toern.length?`<select style="width:100%">
-        <option>${toern.length} toernooi${toern.length===1?'':'en'}</option>
-        ${toern.map(t=>`<option>${esc(t.naam)}</option>`).join('')}
-      </select>`:'<span class="rm">geen</span>'}</td>
     <td><div class="brow">
       <button class="btn bg bsm" onclick="openSpelerModal('${s.id}')">Bewerken</button>
       ${eigen?`<button class="btn bg bsm" onclick="resetSpelerPin('${s.id}')">Pincode reset</button>`:''}
@@ -4644,7 +4709,8 @@ function renderBeheerSpelersPanel(){
   </tr>`;
   }).join('')}
   </tbody></table></div>
-  ${(ta && !spelers.length)?'<div class="empty">Nog geen spelers. Voeg ze toe met "+ Speler", of via de deelnemers of de startlijst van je toernooi.</div>':''}
+  ${(inFilter && !spelers.length)?'<div class="empty">Dit toernooi heeft nog geen deelnemers.</div>':''}
+  ${(ta && !alleSpelers.length)?'<div class="empty">Nog geen spelers. Voeg ze toe met "+ Speler", of via de deelnemers of de startlijst van je toernooi.</div>':''}
   ${beheerdersKaartHtml()}`;
   spelerSelectieTonen();
 }
@@ -4663,7 +4729,8 @@ function spelerKies(id, aan){
   spelerSelectieTonen();
 }
 function spelerKiesAlles(aan){
-  spelerSelectie = new Set(aan ? allSpelers.map(sp=>sp.id) : []);
+  // Alleen de spelers die nu in de lijst staan (bij een gekozen toernooi dus alleen die).
+  spelerSelectie = new Set(aan ? Array.from(document.querySelectorAll('#panel-beheer-spelers input.sp-kies')).map(c=>c.dataset.id) : []);
   document.querySelectorAll('#panel-beheer-spelers input.sp-kies').forEach(c=>{ c.checked = aan; });
   spelerSelectieTonen();
 }
@@ -4676,7 +4743,10 @@ function spelerSelectieTonen(){
   const knop = document.getElementById('spVerwijderKnop');
   if(knop){ knop.style.display = n ? '' : 'none'; knop.textContent = 'Verwijderen ('+n+')'; }
   const alles = document.getElementById('spKiesAlles');
-  if(alles){ alles.checked = n>0 && n===allSpelers.length; alles.indeterminate = n>0 && n<allSpelers.length; }
+  // Vergelijk met de spelers die nu in de lijst staan (bij een gekozen toernooi alleen die).
+  const zichtbaar = Array.from(document.querySelectorAll('#panel-beheer-spelers input.sp-kies')).map(c=>c.dataset.id);
+  const nZicht = zichtbaar.filter(id=>spelerSelectie.has(id)).length;
+  if(alles){ alles.checked = nZicht>0 && nZicht===zichtbaar.length; alles.indeterminate = nZicht>0 && nZicht<zichtbaar.length; }
 }
 async function verwijderGekozenSpelers(){
   if(!isSuperAdmin()){ geenRechten(); return; }
@@ -6693,7 +6763,7 @@ async function renderKlassementPanel(){
   const lijst = mijnToernooien();
   if(!lijst.length){ el.innerHTML = '<div class="empty">Nog geen toernooien.</div>'; return; }
   let toernooiId = localStorage.getItem('klassementToernooi');
-  if(!toernooiId || !lijst.find(t=>t.id===toernooiId)) toernooiId = lijst[0].id;
+  if(!toernooiId || !lijst.find(t=>t.id===toernooiId)) toernooiId = await standaardKlassementToernooi(lijst);
   localStorage.setItem('klassementToernooi', toernooiId);
   const actieveTypes = actieveScoringTypes(toernooiId);
   const heeftMuntjes = toernooiHeeftMuntjes(toernooiId);
@@ -6708,7 +6778,7 @@ async function renderKlassementPanel(){
   if(!geldigeModes.includes(mode)) mode = actieveTypes[0] || 'birdie-bruto';
   el.innerHTML = `
   <div class="sh"><div><div class="st">Klassement</div></div><button class="btn bg bsm" onclick="exporteerKlassementPdf()">Exporteer PDF</button></div>
-  ${lijst.length>1?`<div class="fg"><select id="klsToernooi" onchange="wisselKlassementToernooi(this.value)">${lijst.map(t=>`<option value="${t.id}" ${t.id===toernooiId?'selected':''}>${esc(t.naam)}</option>`).join('')}</select></div>`:''}
+  ${lijst.length>1?`<div class="fg kls-toernooikeuze"><label>Toernooi <span class="hint">${lijst.length} toernooien — tik om een ander toernooi te kiezen</span></label><select id="klsToernooi" onchange="wisselKlassementToernooi(this.value)">${lijst.map(t=>`<option value="${t.id}" ${t.id===toernooiId?'selected':''}>${esc(t.naam)}</option>`).join('')}</select></div>`:''}
   <div class="subtabs">
     ${actieveTypes.map(t=>`<button class="subtab ${mode===t?'active':''}" onclick="wisselKlassementMode('${t}')">${esc(KLASSEMENT_MODE_LABELS[t])}</button>`).join('')}
     <button class="subtab ${mode==='birdie-bruto'?'active':''}" onclick="wisselKlassementMode('birdie-bruto')">Birdies</button>
@@ -6718,6 +6788,22 @@ async function renderKlassementPanel(){
   </div>
   <div id="klsBody"><div class="empty">Laden…</div></div>`;
   await tekenKlassementBody(toernooiId, mode);
+}
+// Welk toernooi het klassement toont als je het opent (sinds v1.56.0): het
+// toernooi waarin het laatst een score is ingevoerd (voor een speler: in een
+// gesloten ronde, want alleen die ziet hij). Geen scores: het eerste uit de
+// lijst. Een keuze die je zelf maakt geldt tot je de app opnieuw opent.
+async function standaardKlassementToernooi(lijst){
+  const ids = new Set(lijst.map(t=>t.id));
+  const rondes = allRondes.filter(r=>ids.has(r.toernooi_id) && (isAdmin() || r.status==='gesloten'));
+  if(rondes.length){
+    try{
+      const rij = await sbG('scores','select=ronde_id,updated_at&stableford=not.is.null&ronde_id=in.('+rondes.map(r=>r.id).join(',')+')&order=updated_at.desc&limit=1');
+      const r = rij && rij[0] && rondeById(rij[0].ronde_id);
+      if(r && ids.has(r.toernooi_id)) return r.toernooi_id;
+    }catch(e){ /* dan het eerste uit de lijst */ }
+  }
+  return lijst[0].id;
 }
 function wisselKlassementToernooi(id){ localStorage.setItem('klassementToernooi', id); renderKlassementPanel(); }
 function wisselKlassementMode(m){ localStorage.setItem('klassementMode', m); renderKlassementPanel(); }
