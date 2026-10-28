@@ -434,6 +434,12 @@ input.ph-in:focus{outline:none;border-color:var(--gl);background:var(--wh)}
    kolomkop van de scorekaart erin) mee omhoog zodra het toetsenbord opkomt. */
 .mo{display:none;position:fixed;left:0;right:0;top:var(--vvt,0px);height:var(--vvh,100vh);background:rgba(0,0,0,.55);z-index:300;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
 .mo.open{display:flex}
+/* Venster open: geen 'trekken om te verversen' en geen doorscrollen naar de pagina eronder (v1.57.0). */
+.md{overscroll-behavior:contain}
+html:has(.mo.open), html:has(.mo.open) body{overscroll-behavior-y:contain}
+/* Score die nog niet verstuurd is (geen bereik): lichtgrijs tot hij binnen is. */
+.scc.scc-wacht{color:#a3aba6 !important}
+.sc-wacht-info{font-family:'Inter',sans-serif;font-size:.76rem;color:var(--tm);margin:-4px 0 10px}
 /* max-height volgt (net als .mo hierboven) de ZICHTBARE viewport i.p.v. een
    vaste 88vh: anders blijft de modal op mobiel proberen 88% van de VOLLEDIGE
    (toetsenbord-loze) hoogte te vullen zodra het toetsenbord opkomt, past de
@@ -538,7 +544,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.56.0';
+const APP_VERSION = '1.57.0';
 try{ localStorage.removeItem('klassementToernooi'); }catch(e){}
 (function(){
   const el = document.getElementById('hdrSub');
@@ -791,11 +797,32 @@ function openModalHtml(id, html){
   }
   el.innerHTML = '<div class="md"><button type="button" class="mo-close" aria-label="Sluiten" onclick="closeModal(\''+id+'\')">&times;</button><div class="mh"></div>'+html+'</div>';
   el.classList.add('open');
-  el.onclick = (e)=>{ if(e.target===el) closeModal(id); };
+  // Tikken naast het venster sluit het — behalve bij de scorekaart: daar
+  // gebeurde dat op de baan te makkelijk per ongeluk (v1.57.0). Die sluit je
+  // met het kruisje of met Klaar.
+  el.onclick = (e)=>{ if(e.target===el && id!=='moScore') closeModal(id); };
 }
 function closeModal(id){
   const el = document.getElementById(id);
   if(el) el.classList.remove('open');
+  if(id==='moScore') vergeetOpenKaart();
+}
+/* ---------- OPEN SCOREKAART ONTHOUDEN (sinds v1.57.0) ----------
+   Start de app opnieuw terwijl een speler in zijn kaart zat (de telefoon
+   ruimde de app op, of de pagina werd per ongeluk ververst), dan opent de
+   kaart vanzelf weer — alleen dezelfde dag, en niet als hij hem zelf sloot. */
+function onthoudOpenKaart(rondeId){
+  if(!ingelogdSpeler) return;
+  try{ localStorage.setItem('rondjeOpenKaart', JSON.stringify({rondeId, spelerId: ingelogdSpeler.id, datum: vandaagStr()})); }catch(e){}
+}
+function vergeetOpenKaart(){ try{ localStorage.removeItem('rondjeOpenKaart'); }catch(e){} }
+async function herstelOpenKaart(){
+  let k = null;
+  try{ k = JSON.parse(localStorage.getItem('rondjeOpenKaart')||'null'); }catch(e){ k = null; }
+  if(!k || !ingelogdSpeler || isAdmin()) return;
+  const ronde = rondeById(k.rondeId);
+  if(k.spelerId!==ingelogdSpeler.id || k.datum!==vandaagStr() || !ronde || ronde.status==='gesloten'){ vergeetOpenKaart(); return; }
+  try{ await openToernooiDetail(ronde.toernooi_id); await openScoreModal(ronde.id); }catch(e){ /* dan gewoon het startscherm */ }
 }
 
 /* ---------- PBKDF2 HASHING (pincodes & wachtwoorden) ---------- */
@@ -1465,11 +1492,16 @@ window.onload = async ()=>{
 
 async function boot(){
   document.querySelectorAll('.panel').forEach(p=>{ p.classList.remove('active'); p.innerHTML=''; });
+  let laadOk = true;
   try{
     await laadAlles();
     setupRealtime();
   }catch(e){
-    toast('Kan Supabase niet bereiken: '+e.message, true);
+    laadOk = false;
+    // Geen bereik: werk met de laatst bekende gegevens en blijf ingelogd (v1.57.0).
+    if(herstelSnapshot()) toast('Geen verbinding — je ziet de laatst bekende gegevens. De app probeert het vanzelf opnieuw.', true);
+    else toast('Kan Supabase niet bereiken: '+e.message, true);
+    planHerverbinding();
   }
   // Sessie herstellen
   let spId = localStorage.getItem('speler_id');
@@ -1481,7 +1513,10 @@ async function boot(){
   if(spId && adNaam){ localStorage.removeItem('speler_id'); spId = null; }
   if(spId){
     ingelogdSpeler = allSpelers.find(s=>s.id===spId) || null;
-    if(!ingelogdSpeler) localStorage.removeItem('speler_id');
+    // Alleen uitloggen als de gegevens écht geladen zijn en de speler er niet
+    // (meer) bij staat — nooit door een netwerkfout.
+    if(!ingelogdSpeler && laadOk) localStorage.removeItem('speler_id');
+    if(!ingelogdSpeler && !laadOk) ingelogdSpeler = {id: spId, naam: localStorage.getItem('speler_naam')||'', exact_hcp: null};
   }
   if(adNaam){
     // Admin-sessie: we bewaren alleen de naam lokaal; echte check gebeurt bij gevoelige acties niet opnieuw
@@ -1492,7 +1527,7 @@ async function boot(){
       rec = (rijen && rijen[0]) || null;
     }
     if(rec){ ingelogdAdmin = rec; localStorage.setItem('laatste_admin_naam', rec.naam); }
-    else localStorage.removeItem('admin_naam');
+    else if(laadOk) localStorage.removeItem('admin_naam');
   }
   renderHeader();
   renderNav();
@@ -1504,6 +1539,10 @@ async function boot(){
     document.getElementById('panel-login').classList.add('active');
     renderLoginPanel();
   }
+  // Zat de speler in zijn scorekaart toen de app herstartte? Dan daar verder.
+  if(ingelogdSpeler && !isAdmin()) await herstelOpenKaart();
+  // Nog niet verstuurde scores (geen bereik bij het intikken): nu proberen.
+  wachtrijVerstuur();
   // Super Admin: wijzigingen van Toernooi Admins aan banen laten zien.
   if(isSuperAdmin() && ROLLEN_AAN && allBaanWijzigingen.length && !baanMeldingGetoond){
     baanMeldingGetoond = true;
@@ -1582,6 +1621,59 @@ async function laadAlles(){
   }catch(e){ allTeams = []; allTeamLeden = []; }
   // Zodra er ergens een ronde met het Muntjes Spel bestaat: live meeluisteren.
   try{ setupMuntjesRealtime(); }catch(e){}
+  bewaarSnapshot();
+}
+/* ---------- LAATST BEKENDE GEGEVENS (sinds v1.57.0) ----------
+   Na elke geslaagde laadronde bewaart de app een kopie op de telefoon. Start
+   de app op zonder bereik, dan werkt hij daarmee (en blijft de speler
+   ingelogd) tot er weer verbinding is. */
+function bewaarSnapshot(){
+  const snap = {t: Date.now(), allBanen, allLussen, allCombinaties, allTees, allSpelers, allToernooien, allRondes, allDeelnemers,
+    allExtraPrijzen, allTeams, allTeamLeden, allAdmins, allToernooiAdmins, allAdminSpelers,
+    vlag: {ROLLEN_AAN, SPELERSLIJST_AAN, BAANLOG_AAN, PH_HANDMATIG_AAN, MAXPH_AAN, WEGVAL_AAN, TOERNOOI_SPEL_AAN, HCPTOON_AAN}};
+  try{ localStorage.setItem('rondjeSnapshot', JSON.stringify(snap)); }
+  catch(e){
+    // Te groot (logo's): dan zonder logo's.
+    try{ snap.allToernooien = allToernooien.map(t=>({...t, logo_data:null})); localStorage.setItem('rondjeSnapshot', JSON.stringify(snap)); }catch(e2){}
+  }
+}
+function herstelSnapshot(){
+  let snap = null;
+  try{ snap = JSON.parse(localStorage.getItem('rondjeSnapshot')||'null'); }catch(e){ snap = null; }
+  if(!snap) return false;
+  allBanen = snap.allBanen||[]; allLussen = snap.allLussen||[]; allCombinaties = snap.allCombinaties||[]; allTees = snap.allTees||[];
+  allSpelers = snap.allSpelers||[]; allToernooien = snap.allToernooien||[]; allRondes = snap.allRondes||[]; allDeelnemers = snap.allDeelnemers||[];
+  allExtraPrijzen = snap.allExtraPrijzen||[]; allTeams = snap.allTeams||[]; allTeamLeden = snap.allTeamLeden||[];
+  allAdmins = snap.allAdmins||[]; allToernooiAdmins = snap.allToernooiAdmins||[]; allAdminSpelers = snap.allAdminSpelers||[];
+  const v = snap.vlag||{};
+  ROLLEN_AAN = !!v.ROLLEN_AAN; SPELERSLIJST_AAN = !!v.SPELERSLIJST_AAN; BAANLOG_AAN = !!v.BAANLOG_AAN; PH_HANDMATIG_AAN = !!v.PH_HANDMATIG_AAN;
+  MAXPH_AAN = !!v.MAXPH_AAN; WEGVAL_AAN = !!v.WEGVAL_AAN; TOERNOOI_SPEL_AAN = !!v.TOERNOOI_SPEL_AAN; HCPTOON_AAN = !!v.HCPTOON_AAN;
+  return true;
+}
+// Geen verbinding bij het opstarten: blijf het proberen (elke 15 s, en meteen
+// zodra de telefoon weer verbinding meldt). Lukt het, dan alles verversen.
+let herverbindTimer = null;
+function planHerverbinding(){
+  if(herverbindTimer) return;
+  herverbindTimer = setInterval(probeerHerverbinding, 15000);
+}
+let herverbindBezig = false;
+async function probeerHerverbinding(){
+  if(!herverbindTimer || herverbindBezig) return;
+  herverbindBezig = true;
+  try{
+    await laadAlles();
+    clearInterval(herverbindTimer); herverbindTimer = null;
+    try{ heropenRealtime(); }catch(e){}
+    if(ingelogdSpeler){ const vers = allSpelers.find(sp=>sp.id===ingelogdSpeler.id); if(vers) ingelogdSpeler = vers; }
+    toast('Weer verbinding');
+    const scoreOpen = document.getElementById('moScore')?.classList.contains('open');
+    if(scoreOpen) scVerversOpenKaart();
+    else { const p = document.querySelector('.panel.active'); const naam = p ? p.id.replace('panel-','') : null;
+      if(naam==='toernooi-detail' && huidigToernooiDetailId) openToernooiDetail(huidigToernooiDetailId); else if(naam) showPanel(naam); }
+    wachtrijVerstuur();
+  }catch(e){ /* nog steeds geen verbinding */ }
+  finally{ herverbindBezig = false; }
 }
 
 /* =========================================================
@@ -1791,6 +1883,7 @@ async function scVerversOpenKaart(){
     // van andere flights blijven ongemoeid.
     const inFlight = new Set(ctx.kolomSpelers);
     ctx.log = (ctx.log||[]).filter(l=>!inFlight.has(l.speler_id)).concat(log||[]);
+    scVoegWachtrijToe(ctx);
     // Tee/handicap van medespelers (voor hun punten en subtotalen): de eigen
     // rij blijft zoals dit toestel hem bijhoudt.
     if(scores) ctx.kolomScores = (ctx.kolomScores||[]).filter(sc=>sc.speler_id===ctx.spelerId).concat(scores.filter(sc=>sc.speler_id!==ctx.spelerId));
@@ -1806,6 +1899,8 @@ async function scVerversOpenKaart(){
       }
     }
     scGridBijwerkenNaVerversen(ctx);
+    bewaarKaartCache(ctx);
+    scToonWachtInfo();
   }catch(e){ /* geen bereik: de volgende poging haalt het in */ }
   finally{ scVerversBezig = false; }
 }
@@ -1951,6 +2046,7 @@ async function doSpelerLogin(){
   }catch(e){ toast('Inloggen mislukt: '+e.message, true); }
 }
 async function voltooiSpelerLogin(rec){
+  try{ localStorage.setItem('speler_naam', rec && rec.naam ? rec.naam : ''); }catch(e){}
   // Je kunt niet tegelijk als speler én als admin ingelogd zijn — inloggen
   // als speler beëindigt automatisch een eventuele actieve adminsessie.
   const welAdminActief = !!ingelogdAdmin;
@@ -4036,13 +4132,13 @@ function parseNaamRegel(regel){
   if(m) return {naam: m[1].trim(), notitie: m[2].trim()};
   return {naam: regel.trim(), notitie: null};
 }
-async function laadFlightsVoorRonde(rondeId){
+async function laadFlightsVoorRonde(rondeId, stil){
   let flights = [], spelers = [];
   try{
     flights = await sbG('ronde_flights','ronde_id=eq.'+rondeId+'&order=volgorde') || [];
     const flightIds = flights.map(f=>f.id);
     spelers = flightIds.length ? (await sbG('ronde_flight_spelers','flight_id=in.('+flightIds.join(',')+')&order=volgorde') || []) : [];
-  }catch(e){ toast('Laden startlijst mislukt: '+e.message, true); }
+  }catch(e){ if(stil) throw e; toast('Laden startlijst mislukt: '+e.message, true); }
   return {flights, spelers};
 }
 async function laadFlightsVoorToernooi(toernooiId){
@@ -5467,6 +5563,7 @@ async function openScoreModal(rondeId, forceSpelerId){
   }
   const readOnly = ronde.status==='gesloten' && !isAdmin();
   let spelerId = forceSpelerId || (isAdmin()?null:ingelogdSpeler.id);
+  if(!isAdmin() && !readOnly) onthoudOpenKaart(rondeId);
 
   // Eerste keer dat deze speler zelf een kaart opent: eerst exacte hcp laten bevestigen
   // (spelers die via de startlijst-import zijn aangemaakt hebben nog nooit zelf hun hcp opgegeven).
@@ -5510,8 +5607,10 @@ async function bevestigHcpEnGaVerder(){
 async function renderScoreBody(spelerId){
   const ctx = window._scCtx;
   const speler = allSpelers.find(s=>s.id===spelerId);
-  let existing = null;
-  try{ const rows = await sbG('scores','ronde_id=eq.'+ctx.rondeId+'&speler_id=eq.'+spelerId); existing = rows&&rows[0]; }catch(e){}
+  let existing = null, kaartOffline = false;
+  try{ const rows = await sbG('scores','ronde_id=eq.'+ctx.rondeId+'&speler_id=eq.'+spelerId); existing = rows&&rows[0]; }catch(e){ kaartOffline = isNetwerkFout(e); }
+  const kaartCache = (!isAdmin() && kaartOffline) ? leesKaartCache(ctx.rondeId, spelerId) : null;
+  if(kaartCache && kaartCache.existing) existing = kaartCache.existing;
   ctx.spelerId = spelerId; ctx.existingScore = existing;
   const teeId = existing ? existing.tee_id : (ctx.tees.length===1?ctx.tees[0].id:'');
 
@@ -5521,9 +5620,14 @@ async function renderScoreBody(spelerId){
   // Admin behoudt de bestaande enkele-kaart-per-speler weergave (die kan al
   // elke speler individueel corrigeren via de spelerskeuze hierboven).
   ctx.kolomSpelers = [spelerId];
-  if(!isAdmin()){
+  if(!isAdmin() && kaartCache){
+    // Geen bereik: de laatst bekende stand van deze kaart (zie bewaarKaartCache).
+    ctx.flights = kaartCache.flights||[]; ctx.fSpelers = kaartCache.fSpelers||[];
+    ctx.kolomSpelers = scKolomSpelers(ctx);
+    ctx.log = kaartCache.log||[]; ctx.kolomScores = kaartCache.kolomScores || (existing?[existing]:[]);
+  } else if(!isAdmin()){
     try{
-      const {flights, spelers: fSpelers} = await laadFlightsVoorRonde(ctx.rondeId);
+      const {flights, spelers: fSpelers} = await laadFlightsVoorRonde(ctx.rondeId, true);
       ctx.flights = flights; ctx.fSpelers = fSpelers;
       ctx.kolomSpelers = scKolomSpelers(ctx);
     }catch(e){ ctx.flights=[]; ctx.fSpelers=[]; }
@@ -5541,6 +5645,10 @@ async function renderScoreBody(spelerId){
     // scheelt bij het afronden opnieuw alles moeten navragen/intikken.
     try{ ctx.log = await sbG('score_holes_log','ronde_id=eq.'+ctx.rondeId+'&speler_id=eq.'+spelerId) || []; }catch(e){ ctx.log = []; }
   }
+  if(!isAdmin()){
+    if(!kaartCache) bewaarKaartCache(ctx);
+    scVoegWachtrijToe(ctx);
+  }
   // Muntjes Spel (alleen als het voor deze ronde aan staat): de muntjesscores
   // van deze ronde, voor de regel onderaan de kaart.
   ctx.muntjes = ctx.muntjesAan ? await laadMuntjesVoorRondes([ctx.rondeId]) : [];
@@ -5552,6 +5660,7 @@ async function renderScoreBody(spelerId){
       ${ctx.tees.map(t=>`<option value="${t.id}" ${teeId===t.id?'selected':''}>${esc(t.kleur)} (CR ${t.course_rating}/Slope ${t.slope_rating})</option>`).join('')}
     </select></div>
     <div id="scPHInfo" style="font-size:.8rem;color:var(--tl);font-family:'Inter',sans-serif;margin-bottom:10px">Kies een tee om je playing handicap te zien.</div>
+    <div id="scWachtInfo" class="sc-wacht-info" style="display:none"></div>
     <div id="scNoTeeMsg" class="empty" style="${teeId?'display:none':''}">${ctx.readOnly?'Geen score ingevoerd voor deze ronde.':'Kies eerst een tee om te starten met scoren.'}</div>
     <div id="scEntryArea" style="${teeId?'':'display:none'}">
       ${(!isAdmin() && ctx.kolomSpelers.length>1)?`<div class="sc-legende"><span><i class="unval"></i> nog niet bevestigd</span><span><i class="val"></i> bevestigd door medespeler</span><span><i class="mismatch"></i> komt niet overeen</span></div>`:''}
@@ -5569,6 +5678,7 @@ async function renderScoreBody(spelerId){
   if(teeId){ document.getElementById('scTee').value = teeId; onTeeChange(); }
   else if(isAdmin() && !ctx.readOnly){ const sel = document.getElementById('scTee'); if(sel) sel.focus(); }
   else if(!isAdmin()){ scUpdateSummary(scOfficieleUitkomst(scHoleScoresUitLog(ctx, spelerId), ctx.holes, null)); }
+  scToonWachtInfo();
 }
 // Welke spelers krijgen een kolom in de gedeelde scorekaart: de ingelogde
 // speler zelf altijd eerst, daarna zijn flight-genoten voor deze ronde (tot
@@ -5853,7 +5963,7 @@ function scCelStatus(ctx, spelerId, holeIndex){
   // op zijn/haar scherm leeg, ook al bestaan er elders al wel invoeren.
   const eigenKijker = viewerId ? entries.find(e=>e.door_speler_id===viewerId) : null;
   if(!eigenKijker) return {status:'empty', waarde:null};
-  return {status, waarde: eigenKijker.waarde};
+  return {status, waarde: eigenKijker.waarde, wacht: !!eigenKijker._wacht};
 }
 function scCelClass(status){
   return status==='unvalidated' ? ' scc-unval' : status==='validated' ? ' scc-val' : status==='mismatch' ? ' scc-mismatch' : '';
@@ -5982,11 +6092,11 @@ function scoreGridHtml(ctx){
     const heeftFunny = extraPrijzenVoorHole(ctx.rondeId, i+1).length>0;
     cells += `<div class="sc-hcell${heeftFunny?' sc-hcell-funny':''}" ${heeftFunny?`onclick="openHoleFunnieModal('${ctx.rondeId}',${i+1})"`:''}><span class="sc-hnr">H${i+1}</span><span class="sc-hsub">P${h.par} SI${h.si}</span></div>`;
     kolomSpelers.forEach((id,ci)=>{
-      const {status, waarde} = scCelStatus(ctx, id, i);
+      const {status, waarde, wacht} = scCelStatus(ctx, id, i);
       const punten = scPuntenVoor(ctx, id, i, waarde);
       const kanTypen = actieveKolommen.includes(ci);
       const gedimd = !kanTypen && !ctx.readOnly;
-      cells += `<div class="scc-wrap${gedimd?' scc-wrap-dim':''}"><input type="number" min="0" max="15" inputmode="numeric" class="scc${scCelClass(status)}" id="scc_${ci}_${i}"
+      cells += `<div class="scc-wrap${gedimd?' scc-wrap-dim':''}"><input type="number" min="0" max="15" inputmode="numeric" class="scc${scCelClass(status)}${wacht?' scc-wacht':''}" id="scc_${ci}_${i}"
         value="${waarde!=null?waarde:''}" placeholder="–" ${(ctx.readOnly||!kanTypen)?'disabled':''}
         oninput="scGridInputVeranderd(${ci},${i},${ctx.holes.length})" onblur="scGridBlur(${ci},${i})">
         <div class="scc-pt${scPtKlasse(punten)}" id="scpt_${ci}_${i}" ${status!=='empty'?`onclick="scToonInvoerDetails(${ci},${i})" style="cursor:pointer"`:''}>${punten!=null?punten+'pt':''}</div></div>`;
@@ -6211,14 +6321,175 @@ async function scGridCommit(kolomIdx, holeIndex, aantalHoles){
   if(!el || !subjectId || !ingelogdSpeler) return;
   const n = parseInt(el.value,10);
   if(isNaN(n) || n<1) return;
+  // Wachten er al scores op bereik? Dan deze er netjes achteraan.
+  if(wachtrijLees().length){ scBewaarLokaal(ctx, subjectId, holeIndex, n); naarVolgendeGridHole(kolomIdx, holeIndex, aantalHoles); wachtrijVerstuur(); return; }
   scSchrijfStart(ctx);
   try{
     await scLogUpsert(subjectId, holeIndex, ingelogdSpeler.id, n);
     await scSyncOfficieleScore(subjectId);
     scGridHerrenderCel(subjectId, holeIndex);
     naarVolgendeGridHole(kolomIdx, holeIndex, aantalHoles);
-  }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
+  }catch(e){
+    if(isNetwerkFout(e)){ scBewaarLokaal(ctx, subjectId, holeIndex, n); naarVolgendeGridHole(kolomIdx, holeIndex, aantalHoles); }
+    else toast('Opslaan mislukt: '+e.message, true);
+  }
   finally{ scSchrijfKlaar(ctx); }
+}
+/* ---------- SCORES ZONDER BEREIK (sinds v1.57.0) ----------
+   Lukt versturen niet door geen bereik, dan bewaart de app de score op de
+   telefoon (localStorage 'rondjeWachtrij') en toont hem lichtgrijs. Zodra er
+   weer bereik is (de telefoon meldt dat, de app komt weer in beeld, of elke
+   20 s) worden ze in volgorde verstuurd; daarna rekent de app de officiële
+   kaart van de speler opnieuw uit. Ook na een herstart blijven ze bewaard. */
+function isNetwerkFout(e){ return !!(e && /^Netwerkfout/.test(String(e.message||''))); }
+function wachtrijLees(){ try{ const w = JSON.parse(localStorage.getItem('rondjeWachtrij')||'[]'); return Array.isArray(w) ? w : []; }catch(e){ return []; } }
+function wachtrijSchrijf(w){ try{ localStorage.setItem('rondjeWachtrij', JSON.stringify(w)); }catch(e){} }
+function wachtrijSleutel(x){ return [x.rondeId, x.spelerId, x.holeIndex, x.door].join('|'); }
+function wachtrijHaalWeg(rondeId, spelerId, holeIndex, door){
+  const k = wachtrijSleutel({rondeId, spelerId, holeIndex, door});
+  wachtrijSchrijf(wachtrijLees().filter(x=>wachtrijSleutel(x)!==k));
+}
+function wachtrijZet(item){
+  const k = wachtrijSleutel(item);
+  const w = wachtrijLees().filter(x=>wachtrijSleutel(x)!==k);
+  w.push({...item, t: Date.now()});
+  wachtrijSchrijf(w);
+}
+// Score lokaal vastleggen en op de kaart tonen als 'nog niet verstuurd'.
+function scBewaarLokaal(ctx, subjectId, holeIndex, waarde){
+  const door = ingelogdSpeler.id;
+  const eigen = subjectId===door;
+  const teeEl = document.getElementById('scTee');
+  wachtrijZet({rondeId: ctx.rondeId, spelerId: subjectId, holeIndex, door, waarde,
+    teeId: eigen ? (teeEl ? teeEl.value||null : null) : null, pH: eigen ? ctx.currentPH : null});
+  ctx.log = ctx.log || [];
+  let rij = ctx.log.find(l=>l.speler_id===subjectId && l.hole_index===holeIndex && l.door_speler_id===door);
+  if(waarde==null){ ctx.log = ctx.log.filter(l=>l!==rij); }
+  else if(rij){ rij.waarde = waarde; rij._wacht = true; }
+  else ctx.log.push({ronde_id: ctx.rondeId, speler_id: subjectId, hole_index: holeIndex, door_speler_id: door, waarde, _wacht: true});
+  scGridHerrenderCel(subjectId, holeIndex);
+  if(eigen) scUpdateSummary(scOfficieleUitkomst(scHoleScoresUitLog(ctx, subjectId), ctx.holes, ctx.currentPH));
+  bewaarKaartCache(ctx);
+  scToonWachtInfo();
+}
+// Wachtende scores van deze ronde over de (net opgehaalde) stand heen leggen.
+function scVoegWachtrijToe(ctx){
+  if(!ctx || !ingelogdSpeler) return;
+  wachtrijLees().filter(x=>x.rondeId===ctx.rondeId && x.door===ingelogdSpeler.id).forEach(x=>{
+    ctx.log = ctx.log || [];
+    const rij = ctx.log.find(l=>l.speler_id===x.spelerId && l.hole_index===x.holeIndex && l.door_speler_id===x.door);
+    if(x.waarde==null){ ctx.log = ctx.log.filter(l=>l!==rij); return; }
+    if(rij){ rij.waarde = x.waarde; rij._wacht = true; }
+    else ctx.log.push({ronde_id: x.rondeId, speler_id: x.spelerId, hole_index: x.holeIndex, door_speler_id: x.door, waarde: x.waarde, _wacht: true});
+  });
+}
+function scToonWachtInfo(){
+  const el = document.getElementById('scWachtInfo');
+  const ctx = window._scCtx;
+  if(!el || !ctx) return;
+  const n = wachtrijLees().filter(x=>x.rondeId===ctx.rondeId).length;
+  el.style.display = n ? '' : 'none';
+  el.textContent = n ? (n===1?'1 score':n+' scores')+' nog niet verstuurd — gaat vanzelf zodra er bereik is' : '';
+}
+// Laatst bekende stand van een kaart, voor openen zonder bereik.
+function bewaarKaartCache(ctx){
+  if(!ctx || !ingelogdSpeler || isAdmin()) return;
+  try{
+    localStorage.setItem('rondjeKaart', JSON.stringify({rondeId: ctx.rondeId, spelerId: ctx.spelerId, datum: vandaagStr(),
+      existing: ctx.existingScore||null, flights: ctx.flights||[], fSpelers: ctx.fSpelers||[],
+      log: (ctx.log||[]).filter(l=>!l._wacht), kolomScores: ctx.kolomScores||[]}));
+  }catch(e){}
+}
+function leesKaartCache(rondeId, spelerId){
+  try{ const k = JSON.parse(localStorage.getItem('rondjeKaart')||'null'); return (k && k.rondeId===rondeId && k.spelerId===spelerId) ? k : null; }catch(e){ return null; }
+}
+// Eén invoer wegschrijven op zijn sleutel (ronde, speler, hole, invoerder):
+// bijwerken als hij al bestaat, anders toevoegen; waarde null = verwijderen.
+async function logSchrijf(x){
+  const q = 'ronde_id=eq.'+x.rondeId+'&speler_id=eq.'+x.spelerId+'&hole_index=eq.'+x.holeIndex+'&door_speler_id=eq.'+x.door;
+  const best = await sbG('score_holes_log', q) || [];
+  if(x.waarde==null){ for(const b of best) await sbD('score_holes_log', b.id); return; }
+  if(best[0]) await sbPa('score_holes_log', best[0].id, {waarde: x.waarde, updated_at: new Date().toISOString()});
+  else await sbP('score_holes_log', {ronde_id:x.rondeId, speler_id:x.spelerId, hole_index:x.holeIndex, door_speler_id:x.door, waarde:x.waarde});
+}
+// De officiële kaart van een speler opnieuw uitrekenen uit zijn eigen invoer
+// (zelfde regel als scSyncOfficieleScore), los van een geopende kaart.
+async function officieelBijwerken(rondeId, spelerId, teeId, pH){
+  const ronde = rondeById(rondeId);
+  const holes = ronde ? combinatieHoles(combinatieById(ronde.combinatie_id)) : null;
+  if(!holes) return;
+  const log = await sbG('score_holes_log','ronde_id=eq.'+rondeId+'&speler_id=eq.'+spelerId+'&door_speler_id=eq.'+spelerId) || [];
+  const holeScores = new Array(18).fill(null);
+  log.forEach(l=>{ if(l.hole_index>=0 && l.hole_index<18) holeScores[l.hole_index] = l.waarde; });
+  const rij = (await sbG('scores','ronde_id=eq.'+rondeId+'&speler_id=eq.'+spelerId) || [])[0];
+  const ph = rij ? (kaartPhHandmatig(rij)!=null ? kaartPhHandmatig(rij) : (rij.playing_hcp!=null ? rij.playing_hcp : pH)) : pH;
+  const u = scOfficieleUitkomst(holeScores, holes, ph==null?null:ph);
+  const payload = {hole_scores: holeScores, playing_hcp: ph==null?null:ph, bruto:u.bruto, netto:u.netto, stableford:u.stableford,
+    birdies_netto:u.birdies_netto, eagles_netto:u.eagles_netto, birdies_bruto:u.birdies_bruto, eagles_bruto:u.eagles_bruto,
+    ingevoerd_door:'speler', updated_at: new Date().toISOString()};
+  let opgeslagen;
+  if(rij) opgeslagen = await sbPa('scores', rij.id, rij.tee_id ? payload : {...payload, tee_id: teeId||null});
+  else opgeslagen = await sbP('scores', {ronde_id: rondeId, speler_id: spelerId, tee_id: teeId||null, ...payload});
+  // Staat die kaart open op dit toestel, werk dan ook daar de eigen rij bij.
+  const ctx = window._scCtx;
+  const nieuw = opgeslagen && opgeslagen[0];
+  if(ctx && ctx.rondeId===rondeId && nieuw && spelerId===ctx.spelerId){
+    ctx.kolomScores = (ctx.kolomScores||[]).filter(sc=>sc.speler_id!==spelerId).concat([nieuw]);
+    ctx.existingScore = nieuw;
+  }
+}
+let wachtrijBezig = false;
+async function wachtrijVerstuur(){
+  if(wachtrijBezig) return;
+  let w = wachtrijLees();
+  let teDoen = []; try{ teDoen = JSON.parse(localStorage.getItem('rondjeOfficieelTeDoen')||'[]'); }catch(e){ teDoen = []; }
+  if(!w.length && !teDoen.length) return;
+  wachtrijBezig = true;
+  let gelukt = 0;
+  try{
+    while(w.length){
+      const x = w[0];
+      // Eerst onthouden dat de officiële kaart straks opnieuw moet (overleeft een herstart).
+      if(x.spelerId===x.door){
+        const k = x.rondeId+'|'+x.spelerId;
+        const oud = teDoen.find(t=>t.k===k);
+        if(oud){ if(x.teeId) oud.teeId = x.teeId; if(x.pH!=null) oud.pH = x.pH; }
+        else teDoen.push({k, rondeId:x.rondeId, spelerId:x.spelerId, teeId:x.teeId||null, pH:x.pH});
+        localStorage.setItem('rondjeOfficieelTeDoen', JSON.stringify(teDoen));
+      }
+      await logSchrijf(x);
+      gelukt++;
+      // Weghalen, tenzij er intussen een nieuwere waarde voor dezelfde sleutel is ingetikt.
+      w = wachtrijLees().filter(y=>!(wachtrijSleutel(y)===wachtrijSleutel(x) && y.t===x.t));
+      wachtrijSchrijf(w);
+      const ctx = window._scCtx;
+      if(ctx && ctx.rondeId===x.rondeId){
+        const rij = (ctx.log||[]).find(l=>l.speler_id===x.spelerId && l.hole_index===x.holeIndex && l.door_speler_id===x.door);
+        if(rij && !w.some(y=>wachtrijSleutel(y)===wachtrijSleutel(x))) delete rij._wacht;
+      }
+    }
+    while(teDoen.length){
+      const t = teDoen[0];
+      await officieelBijwerken(t.rondeId, t.spelerId, t.teeId, t.pH);
+      teDoen.shift();
+      localStorage.setItem('rondjeOfficieelTeDoen', JSON.stringify(teDoen));
+    }
+    if(gelukt) toast(gelukt===1 ? '1 score alsnog verstuurd' : gelukt+' scores alsnog verstuurd');
+  }catch(e){ /* nog geen bereik: de volgende poging gaat verder waar deze stopte */ }
+  finally{
+    wachtrijBezig = false;
+    const ctx = window._scCtx;
+    if(ctx && document.getElementById('moScore')?.classList.contains('open') && !isAdmin()){
+      (ctx.kolomSpelers||[]).forEach(id=>{ for(let i=0;i<(ctx.holes||[]).length;i++) scGridHerrenderCel(id, i); });
+      scToonWachtInfo();
+      if(gelukt) scVerversOpenKaart();
+    }
+  }
+}
+if(typeof window!=='undefined' && window.addEventListener){
+  window.addEventListener('online', ()=>{ wachtrijVerstuur(); probeerHerverbinding(); });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ wachtrijVerstuur(); probeerHerverbinding(); } });
+  setInterval(()=>{ if(wachtrijLees().length || (localStorage.getItem('rondjeOfficieelTeDoen')||'[]')!=='[]') wachtrijVerstuur(); }, 20000);
 }
 async function scGridBlur(kolomIdx, holeIndex){
   const ctx = window._scCtx;
@@ -6235,13 +6506,17 @@ async function scGridBlur(kolomIdx, holeIndex){
     return;
   }
   if(!bestaand) return;
+  if(bestaand._wacht || wachtrijLees().length){ scBewaarLokaal(ctx, subjectId, holeIndex, null); wachtrijVerstuur(); return; }
   scSchrijfStart(ctx);
   try{
     if(bestaand.id) await sbD('score_holes_log', bestaand.id);
     ctx.log = (ctx.log||[]).filter(l=>l!==bestaand);
     await scSyncOfficieleScore(subjectId);
     scGridHerrenderCel(subjectId, holeIndex);
-  }catch(e){ toast('Verwijderen mislukt: '+e.message, true); }
+  }catch(e){
+    if(isNetwerkFout(e)) scBewaarLokaal(ctx, subjectId, holeIndex, null);
+    else toast('Verwijderen mislukt: '+e.message, true);
+  }
   finally{ scSchrijfKlaar(ctx); }
 }
 // Slaat een (ronde, speler, hole, invoerder)-invoer op — nieuw, of bijgewerkt
@@ -6250,7 +6525,12 @@ async function scLogUpsert(spelerId, holeIndex, doorSpelerId, waarde){
   const ctx = window._scCtx;
   ctx.log = ctx.log || [];
   const bestaand = ctx.log.find(l=>l.speler_id===spelerId && l.hole_index===holeIndex && l.door_speler_id===doorSpelerId);
-  if(bestaand){
+  if(bestaand && bestaand._wacht){
+    // Nog niet verstuurd: via de gewone weg (zoeken op sleutel, dan bijwerken of toevoegen).
+    await logSchrijf({rondeId:ctx.rondeId, spelerId, holeIndex, door:doorSpelerId, waarde});
+    bestaand.waarde = waarde; delete bestaand._wacht;
+    wachtrijHaalWeg(ctx.rondeId, spelerId, holeIndex, doorSpelerId);
+  } else if(bestaand){
     await sbPa('score_holes_log', bestaand.id, {waarde, updated_at:new Date().toISOString()});
     bestaand.waarde = waarde; bestaand.updated_at = new Date().toISOString();
   } else {
@@ -6350,9 +6630,9 @@ function scGridHerrenderCel(subjectId, holeIndex){
   if(ci<0) return;
   const el = document.getElementById('scc_'+ci+'_'+holeIndex);
   if(!el) return;
-  const {status, waarde} = scCelStatus(ctx, subjectId, holeIndex);
+  const {status, waarde, wacht} = scCelStatus(ctx, subjectId, holeIndex);
   el.value = waarde!=null?waarde:'';
-  el.className = 'scc'+scCelClass(status);
+  el.className = 'scc'+scCelClass(status)+(wacht?' scc-wacht':'');
   const ptEl = document.getElementById('scpt_'+ci+'_'+holeIndex);
   if(ptEl){
     const punten = scPuntenVoor(ctx, subjectId, holeIndex, waarde);
@@ -6432,7 +6712,7 @@ async function slaScoreOp(){
     if(document.getElementById('panel-beheer-toernooien').classList.contains('active')) renderBeheerToernooienPanel();
     // Terug naar de spelerslijst van deze ronde, voor de volgende kaart.
     await openInvoerstatusModal(ctx.rondeId);
-  }catch(e){ toast('Opslaan mislukt: '+e.message, true); }
+  }catch(e){ toast(isNetwerkFout(e) ? 'Geen bereik — de kaart is nog niet opgeslagen. Probeer het opnieuw zodra er bereik is.' : 'Opslaan mislukt: '+e.message, true); }
   finally{
     _scOpslaanBezig = false;
     if(knop && knop.isConnected){ knop.disabled = false; knop.textContent = knopTekst; }
