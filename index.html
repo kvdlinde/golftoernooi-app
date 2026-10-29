@@ -64,6 +64,30 @@ body{font-family:'IBM Plex Sans','Inter',sans-serif;background:var(--cr);color:v
 .dn-kies{justify-content:flex-start;gap:12px}
 .dn-kies input{width:20px;height:20px;flex-shrink:0;accent-color:var(--gm);margin:0}
 .dn-kies.aan{background:var(--gp)}
+.keuze-lijst{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.keuze-knop{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:16px 16px;border:1.5px solid var(--cd);border-radius:var(--r);background:var(--cr);cursor:pointer;font-family:'Inter',sans-serif;color:var(--td)}
+.keuze-knop b{font-size:1rem;color:var(--gd)}
+.keuze-knop span{font-size:.82rem;color:var(--tm)}
+.keuze-knop:hover{border-color:var(--gm);background:var(--wh)}
+.im-uitleg{background:var(--cr);border:1.5px solid var(--cd);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-family:'Inter',sans-serif;font-size:.82rem;color:var(--tm)}
+.im-uitleg b{color:var(--gd)}
+.im-uitleg p{margin:6px 0}
+.im-vb{width:100%;border-collapse:collapse;margin:6px 0;font-size:.78rem;background:var(--wh)}
+.im-vb th{background:var(--gd);color:#fff;text-align:left;padding:5px 7px;font-weight:600}
+.im-vb td{border:1px solid var(--cd);padding:4px 7px;color:var(--td)}
+.im-telling{font-family:'Inter',sans-serif;font-size:.84rem;color:var(--td);margin:4px 0 8px}
+.im-optie{display:flex;gap:8px;align-items:center;font-family:'Inter',sans-serif;font-size:.84rem;margin-bottom:8px}
+.im-lijst{border:1.5px solid var(--cd);border-radius:var(--r);background:var(--wh);max-height:300px;overflow-y:auto;margin-bottom:12px}
+.im-rij{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-bottom:1px solid var(--cd);font-family:'Inter',sans-serif;font-size:.86rem;cursor:pointer}
+.im-rij:last-child{border-bottom:none}
+.im-rij input{margin-top:3px;width:18px;height:18px;flex-shrink:0;accent-color:var(--gm)}
+.im-n{min-width:0}
+.im-e{display:block;font-size:.76rem;color:var(--tl);overflow:hidden;text-overflow:ellipsis}
+.im-s{display:block;font-size:.76rem;color:var(--tm);margin-top:1px}
+.im-fout .im-s{color:var(--red)}
+.im-letop .im-s{color:#b26a00}
+.im-nieuw .im-s{color:var(--gm)}
+.im-fout,.im-niets{opacity:.7;cursor:default}
 .dn-leeg{padding:12px;font-family:'Inter',sans-serif;font-size:.8rem;color:var(--tl);font-style:italic}
 
 /* BOTTOM NAV */
@@ -544,7 +568,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.57.0';
+const APP_VERSION = '1.58.0';
 try{ localStorage.removeItem('klassementToernooi'); }catch(e){}
 (function(){
   const el = document.getElementById('hdrSub');
@@ -4770,7 +4794,7 @@ function renderBeheerSpelersPanel(){
       ${ta?'':`<button class="btn bd bsm" id="spVerwijderKnop" style="display:none" onclick="verwijderGekozenSpelers()">Verwijderen</button>`}
       ${ta?'':`<button class="btn bg bsm" onclick="resetAllePincodes()">Alle pincodes op 0000</button>`}
       ${(!ta && ROLLEN_AAN)?`<button class="btn bg bsm" onclick="openSamenvoegModal()">Samenvoegen</button>`:''}
-      <button class="btn bp bsm" onclick="openSpelerModal()">+ Speler</button>
+      <button class="btn bp bsm" onclick="openSpelerKeuze()">+ Speler</button>
     </div>
   </div>
   ${(ROLLEN_AAN && !SPELERSLIJST_AAN)?`<div class="db-melding" id="dbMelding"><b>Database nog niet bijgewerkt</b>${ta
@@ -5041,6 +5065,257 @@ async function voerSamenvoegenUit(){
       ? 'Samenvoegen is nog niet beschikbaar — voer eerst migratie-1.55.0.sql uit in Supabase.'
       : 'Samenvoegen niet uitgevoerd: '+m, true);
   }
+}
+/* ---------- + SPELER: TOEVOEGEN OF IMPORTEREN (sinds v1.58.0) ---------- */
+function openSpelerKeuze(){
+  openModalHtml('moSpelerKeuze', `
+    <h3>Spelers toevoegen</h3>
+    <div class="keuze-lijst">
+      <button type="button" class="keuze-knop" onclick="closeModal('moSpelerKeuze');openSpelerModal()"><b>Speler toevoegen</b><span>Eén speler met de hand invullen</span></button>
+      <button type="button" class="keuze-knop" onclick="closeModal('moSpelerKeuze');openImportModal()"><b>Spelers importeren</b><span>Een lijst inlezen uit een Excel-bestand</span></button>
+    </div>`);
+}
+/* ---------- SPELERS IMPORTEREN UIT EXCEL (sinds v1.58.0) ----------
+   Een Excel- (of CSV-)bestand met de kolommen Naam, Exact Handicap en
+   Emailadres. De app laat eerst per regel zien wat er gaat gebeuren:
+   - nieuw: wordt aangemaakt, met pincode 0000;
+   - bestaat al (zelfde naam, of zelfde e-mailadres met dezelfde naam):
+     wordt aan het gekozen toernooi (of de eigen spelerslijst) gekoppeld;
+     zijn pincode blijft, zijn handicap wordt alleen bijgewerkt als dat is
+     aangevinkt;
+   - let op: het e-mailadres hoort bij een speler met een andere naam
+     (staat standaard uit);
+   - fout: geen naam, onleesbare handicap of e-mailadres, of dubbel.
+   Per regel kun je het vinkje weghalen. Pas na "Importeren" gebeurt er iets. */
+let importRegels = [];
+const SHEETJS_URLS = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];
+function laadSheetJs(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((ok, nee)=>{
+    const probeer = i => {
+      if(i>=SHEETJS_URLS.length){ nee(new Error('Kan de Excel-lezer niet laden — controleer je internetverbinding.')); return; }
+      const sc = document.createElement('script'); sc.src = SHEETJS_URLS[i];
+      sc.onload = ()=> window.XLSX ? ok(window.XLSX) : probeer(i+1);
+      sc.onerror = ()=> probeer(i+1);
+      document.head.appendChild(sc);
+    };
+    probeer(0);
+  });
+}
+function openImportModal(){
+  const ta = isToernooiAdmin();
+  const toern = beheerToernooien().slice().sort((a,b)=>a.naam.localeCompare(b.naam));
+  importRegels = [];
+  openModalHtml('moImport', `
+    <h3>Spelers importeren</h3>
+    <div class="fg"><label>Toernooi <span class="hint">optioneel — de spelers doen dan meteen mee</span></label>
+      <select id="imToernooi" onchange="tekenImportVoorbeeld()"><option value="">${ta?'— geen toernooi: alleen in mijn spelerslijst —':'— geen toernooi —'}</option>${toern.map(t=>`<option value="${t.id}" ${toern.length===1&&ta?'selected':''}>${esc(t.naam)}</option>`).join('')}</select></div>
+    <div class="im-uitleg">
+      <b>Zo moet het Excel-bestand eruitzien</b>
+      <p>Eén speler per regel, met bovenaan deze drie kolomkoppen:</p>
+      <table class="im-vb"><thead><tr><th>Naam</th><th>Exact Handicap</th><th>Emailadres</th></tr></thead>
+        <tbody><tr><td>Tom Bakker</td><td>14,2</td><td>tom@voorbeeld.nl</td></tr><tr><td>Lisa Visser</td><td>22,8</td><td></td></tr></tbody></table>
+      <p>Naam is verplicht (voor- en achternaam). Handicap en e-mailadres mogen leeg blijven. Een CSV-bestand mag ook.</p>
+      <a href="#" onclick="event.preventDefault();downloadImportVoorbeeld()">Voorbeeldbestand downloaden</a>
+    </div>
+    <div class="fg"><label>Bestand</label><input type="file" id="imBestand" accept=".xlsx,.xls,.csv" onchange="leesImportBestand(this)"></div>
+    <div id="imVoorbeeld"></div>
+    <div class="brow"><button class="btn bp bf" id="imKnop" style="display:none" onclick="voerImportUit()">Importeren</button><button class="btn bg bf" onclick="closeModal('moImport')">Sluiten</button></div>`);
+}
+async function downloadImportVoorbeeld(){
+  try{
+    const X = await laadSheetJs();
+    const ws = X.utils.aoa_to_sheet([['Naam','Exact Handicap','Emailadres'],['Tom Bakker',14.2,'tom@voorbeeld.nl'],['Lisa Visser',22.8,'']]);
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Spelers');
+    X.writeFile(wb, 'Rondje - spelers importeren.xlsx');
+  }catch(e){ toast(e.message, true); }
+}
+// Kolomkop herkennen, ongeacht hoofdletters, spaties en streepjes.
+function importKolom(kop){
+  const k = String(kop==null?'':kop).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
+  if(['naam','name','speler','spelersnaam','volledigenaam'].includes(k)) return 'naam';
+  if(['voornaam'].includes(k)) return 'voornaam';
+  if(['tussenvoegsel','tussenvoegsels'].includes(k)) return 'tussen';
+  if(['achternaam'].includes(k)) return 'achternaam';
+  if(['exacthandicap','exacthcp','handicap','hcp','whs','whshandicap','handicapindex','exactehandicap'].includes(k)) return 'hcp';
+  if(['emailadres','email','emailaddress','mail','mailadres','emailadressen'].includes(k)) return 'email';
+  return null;
+}
+function importHandicap(v){
+  if(v==null || String(v).trim()==='') return {leeg:true};
+  if(typeof v==='number') return {waarde: Math.round(v*10)/10};
+  let t = String(v).trim().replace(',', '.');
+  let plus = false;
+  if(t.startsWith('+')){ plus = true; t = t.slice(1); }
+  const n = Number(t);
+  if(isNaN(n)) return {fout:true};
+  const w = Math.round((plus ? -n : n)*10)/10;
+  if(w<-10 || w>54) return {fout:true};
+  return {waarde: w};
+}
+async function leesImportBestand(input){
+  const f = input.files && input.files[0];
+  const wrap = document.getElementById('imVoorbeeld');
+  if(!f){ importRegels = []; tekenImportVoorbeeld(); return; }
+  wrap.innerHTML = '<div class="empty">Bestand lezen…</div>';
+  try{
+    const X = await laadSheetJs();
+    const buf = await f.arrayBuffer();
+    // CSV als tekst lezen: anders wordt een Nederlandse komma (12,5) gelezen als 125.
+    const wb = X.read(buf, {type:'array', raw: /\.csv$/i.test(f.name)});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rijen = X.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+    // De eerste regel met een herkenbare kolom Naam (of Voornaam/Achternaam) is de kopregel.
+    let kopIdx = rijen.findIndex(r=>r.some(c=>['naam','voornaam','achternaam'].includes(importKolom(c))));
+    if(kopIdx<0) throw new Error('Geen kolom "Naam" gevonden. Zet bovenaan de kolomkoppen Naam, Exact Handicap en Emailadres.');
+    const kol = {};
+    rijen[kopIdx].forEach((c,i)=>{ const k = importKolom(c); if(k && kol[k]==null) kol[k] = i; });
+    const regels = [];
+    rijen.slice(kopIdx+1).forEach((r, i)=>{
+      const cel = k => kol[k]!=null ? String(r[kol[k]]==null?'':r[kol[k]]).trim() : '';
+      let naam = cel('naam');
+      if(!naam && (kol.voornaam!=null || kol.achternaam!=null)) naam = [cel('voornaam'), cel('tussen'), cel('achternaam')].filter(Boolean).join(' ');
+      naam = naam.replace(/\s+/g,' ').trim();
+      const hcpRuw = kol.hcp!=null ? r[kol.hcp] : '';
+      const email = cel('email');
+      if(!naam && (hcpRuw==null || String(hcpRuw).trim()==='') && !email) return;   // lege regel
+      regels.push({regel: kopIdx+i+2, naam, hcpRuw, email});
+    });
+    if(!regels.length) throw new Error('Het bestand bevat geen spelers onder de kopregel.');
+    if(regels.length>500) throw new Error('Maximaal 500 spelers per keer.');
+    importRegels = regels;
+    tekenImportVoorbeeld();
+  }catch(e){ importRegels = []; wrap.innerHTML = `<div class="db-melding">${esc(e.message)}</div>`; document.getElementById('imKnop').style.display='none'; }
+}
+// Per regel bepalen wat er gaat gebeuren (zonder iets op te slaan).
+function beoordeelImport(toernooiId){
+  const ta = isToernooiAdmin();
+  const naarLijst = !toernooiId && ta;
+  const gezien = new Set();
+  const bekend = new Set(beheerSpelers().map(sp=>sp.id));
+  return importRegels.map(r=>{
+    const uit = {...r, hcp:null, status:'fout', tekst:'', aan:false};
+    if(!r.naam){ uit.tekst = 'Geen naam'; return uit; }
+    const h = importHandicap(r.hcpRuw);
+    if(h.fout){ uit.tekst = 'Handicap "'+r.hcpRuw+'" klopt niet (−10 t/m 54)'; return uit; }
+    uit.hcp = h.leeg ? null : h.waarde;
+    if(r.email && !emailGeldig(r.email)){ uit.tekst = 'E-mailadres klopt niet'; return uit; }
+    const sl = naamSleutel(r.naam);
+    if(gezien.has(sl)){ uit.tekst = 'Staat dubbel in het bestand'; return uit; }
+    gezien.add(sl);
+    const opNaam = allSpelers.find(sp=>naamSleutel(sp.naam)===sl);
+    const metAdres = r.email ? spelersMetEmail(r.email) : [];
+    const adresAnder = !opNaam && metAdres.length ? metAdres[0] : null;
+    if(opNaam){
+      uit.status = 'bestaand'; uit.speler = opNaam;
+      const doetMee = toernooiId ? allDeelnemers.some(d=>d.toernooi_id===toernooiId && d.speler_id===opNaam.id) : (naarLijst ? bekend.has(opNaam.id) : true);
+      uit.koppelen = !doetMee;
+      if(naarLijst && !SPELERSLIJST_AAN && !bekend.has(opNaam.id)){ uit.status='fout'; uit.tekst='Staat al in Rondje! — kies een toernooi om hem te koppelen'; return uit; }
+      // Handicap bijwerken mag alleen bij spelers die deze beheerder al beheert (of: Super Admin).
+      uit.magHcp = !ta || bekend.has(opNaam.id) || uit.koppelen;
+      uit.hcpAnders = uit.hcp!=null && Number(opNaam.exact_hcp)!==uit.hcp;
+      const delen = [];
+      delen.push(uit.koppelen ? (toernooiId ? 'bestaat al — doet mee aan het toernooi' : 'bestaat al — komt in je spelerslijst') : (toernooiId ? 'doet al mee' : 'bestaat al'));
+      if(uit.hcpAnders && uit.magHcp) delen.push('hcp '+fH(opNaam.exact_hcp)+' → '+fH(uit.hcp));
+      uit.tekst = delen.join(' · ');
+      uit.aan = uit.koppelen || (uit.hcpAnders && uit.magHcp);
+      if(!uit.aan){ uit.status = 'niets'; }
+      return uit;
+    }
+    if(adresAnder){
+      uit.status = 'letop'; uit.tekst = 'Let op: dit e-mailadres hoort al bij '+adresAnder.naam+' — vink aan om toch een nieuwe speler te maken'; uit.aan = false;
+      return uit;
+    }
+    uit.status = 'nieuw'; uit.tekst = 'Nieuw'+(uit.hcp==null?' (zonder handicap — vult hij later zelf in)':''); uit.aan = true;
+    return uit;
+  });
+}
+function tekenImportVoorbeeld(){
+  const wrap = document.getElementById('imVoorbeeld');
+  const knop = document.getElementById('imKnop');
+  if(!wrap) return;
+  if(!importRegels.length){ wrap.innerHTML=''; if(knop) knop.style.display='none'; return; }
+  const toernooiId = document.getElementById('imToernooi').value || null;
+  const oud = new Map((window._imBeoordeeld||[]).map(r=>[r.regel, r.aan]));
+  const lijst = beoordeelImport(toernooiId).map(r=>{
+    if(oud.has(r.regel) && ['nieuw','bestaand','letop'].includes(r.status)) r.aan = oud.get(r.regel);
+    return r;
+  });
+  window._imBeoordeeld = lijst;
+  const tel = st => lijst.filter(r=>r.status===st).length;
+  const bijwerk = lijst.some(r=>r.status==='bestaand' && r.hcpAnders && r.magHcp);
+  wrap.innerHTML = `
+    <p class="im-telling">${lijst.length} regel(s): ${tel('nieuw')} nieuw, ${tel('bestaand')+tel('niets')} bestaan al${tel('letop')?', '+tel('letop')+' let op':''}${tel('fout')?', <span style="color:var(--red)">'+tel('fout')+' met een fout</span>':''}</p>
+    ${bijwerk?`<label class="im-optie"><input type="checkbox" id="imHcpBijwerken" checked onchange="telImport()"> Handicap van bestaande spelers bijwerken met die uit het bestand</label>`:''}
+    <div class="im-lijst">${lijst.map((r,i)=>`
+      <label class="im-rij im-${r.status}">
+        <input type="checkbox" ${r.aan?'checked':''} ${['fout','niets'].includes(r.status)?'disabled':''} onchange="window._imBeoordeeld[${i}].aan=this.checked;telImport()">
+        <span class="im-n"><b>${esc(r.naam||'(geen naam)')}</b>${r.hcp!=null?' · hcp '+fH(r.hcp):''}${r.email?'<span class="im-e">'+esc(r.email)+'</span>':''}<span class="im-s">${esc(r.tekst)}</span></span>
+      </label>`).join('')}</div>`;
+  telImport();
+}
+function telImport(){
+  const knop = document.getElementById('imKnop');
+  const lijst = window._imBeoordeeld||[];
+  const bijw = document.getElementById('imHcpBijwerken');
+  const n = lijst.filter(r=>r.aan && (r.status!=='bestaand' || r.koppelen || (bijw && bijw.checked && r.hcpAnders && r.magHcp))).length;
+  if(knop){ knop.style.display = lijst.length ? '' : 'none'; knop.disabled = !n; knop.textContent = n ? 'Importeren ('+n+')' : 'Niets te importeren'; }
+}
+let importBezig = false;
+async function voerImportUit(){
+  if(importBezig) return;
+  const lijst = (window._imBeoordeeld||[]).filter(r=>r.aan);
+  const toernooiId = document.getElementById('imToernooi').value || null;
+  if(toernooiId && !magToernooiBeheren(toernooiId)){ geenRechten(); return; }
+  const hcpBijwerken = !!(document.getElementById('imHcpBijwerken') && document.getElementById('imHcpBijwerken').checked);
+  const naarLijst = !toernooiId && isToernooiAdmin();
+  const knop = document.getElementById('imKnop');
+  importBezig = true;
+  let nieuw = 0, gekoppeld = 0, hcp = 0; const mislukt = [];
+  try{
+    for(let i=0;i<lijst.length;i++){
+      const r = lijst[i];
+      if(knop){ knop.disabled = true; knop.textContent = 'Bezig… '+(i+1)+' van '+lijst.length; }
+      try{
+        let speler = r.speler;
+        if(r.status==='nieuw' || r.status==='letop'){
+          const velden = {naam: r.naam, pin_hash: await maakHash(STANDAARD_PIN)};
+          if(r.email) velden.email = r.email;
+          if(r.hcp!=null){ velden.exact_hcp = r.hcp; velden.hcp_bevestigd = true; }
+          const rijen = await sbP('spelers', metMaker(velden));
+          speler = rijen[0]; allSpelers.push(speler); nieuw++;
+          if(toernooiId){ const d = await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id:speler.id, status:'uitgenodigd'}); if(d && d[0]) allDeelnemers.push(d[0]); }
+          continue;
+        }
+        // bestaande speler
+        if(r.koppelen){
+          if(toernooiId){ const d = await sbP('toernooi_deelnemers', {toernooi_id:toernooiId, speler_id:speler.id, status:'uitgenodigd'}); if(d && d[0]) allDeelnemers.push(d[0]); }
+          else if(naarLijst){ const a = await sbP('admin_spelers', {admin_id: ingelogdAdmin.id, speler_id: speler.id}); if(a && a[0]) allAdminSpelers.push(a[0]); }
+          gekoppeld++;
+        }
+        if(hcpBijwerken && r.hcpAnders && r.magHcp){
+          const oude = speler.exact_hcp!=null ? Number(speler.exact_hcp) : null;
+          if(speler.hcp_bevestigd===true && oude!=null) await legAfgerondeKaartenVast(speler.id, oude);
+          await sbPa('spelers', speler.id, {exact_hcp: r.hcp, hcp_bevestigd: true});
+          speler.exact_hcp = r.hcp; speler.hcp_bevestigd = true; hcp++;
+        }
+        // Had hij nog geen e-mailadres, dan het adres uit het bestand bewaren (nooit overschrijven).
+        if(r.email && !speler.email && (!isToernooiAdmin() || spelerUitsluitendEigen(speler.id))){
+          try{ await sbPa('spelers', speler.id, {email: r.email}); speler.email = r.email; }catch(e){}
+        }
+      }catch(e){ mislukt.push(r.naam+': '+e.message); }
+    }
+  } finally { importBezig = false; }
+  await laadAlles();
+  renderBeheerSpelersPanel();
+  if(document.getElementById('panel-beheer-toernooien')?.classList.contains('active')) renderBeheerToernooienPanel();
+  const delen = [];
+  if(nieuw) delen.push(nieuw+' nieuw');
+  if(gekoppeld) delen.push(gekoppeld+(toernooiId?' bestaand toegevoegd aan het toernooi':' bestaand in je lijst'));
+  if(hcp) delen.push(hcp+' handicap(s) bijgewerkt');
+  closeModal('moImport');
+  if(mislukt.length) toast('Import klaar ('+(delen.join(', ')||'niets gedaan')+'), maar '+mislukt.length+' niet gelukt: '+mislukt.slice(0,3).join('; '), true);
+  else toast('Import klaar: '+(delen.join(', ')||'niets gedaan')+(nieuw?'. Nieuwe spelers loggen de eerste keer in met pincode '+STANDAARD_PIN+'.':''));
 }
 function openSpelerModal(id){
   const s = id ? allSpelers.find(x=>x.id===id) : null;
