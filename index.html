@@ -221,6 +221,20 @@ tr:last-child td{border-bottom:none}
    bruikbaar, niet alleen de Admin — zie openHoleFunnieModal). */
 .sc-hcell.sc-hcell-funny{background:#fff3e0;border-radius:6px;cursor:pointer}
 .sc-hcell.sc-hcell-funny .sc-hnr,.sc-hcell.sc-hcell-funny .sc-hsub{color:#e65100}
+/* Telefoon gedraaid (landscape, sinds v1.59.0): hole, par en SI even groot als
+   de cijfers in de vakjes, naast elkaar op één regel. De eerste kolom wordt
+   zo breed als nodig; de spelerskolommen delen de rest. Rechtop blijft het
+   smalle kolommetje met kleine letters, want daar is geen ruimte. */
+@media (orientation:landscape){
+  .sc-grid{--sc-hkol:max-content}
+  .sc-hcell{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:.45em;padding:4px 10px 4px 4px;line-height:1}
+  .sc-hcell .sc-hnr,.sc-hcell .sc-hsub{font-size:1.5rem;white-space:nowrap}
+  .sc-hcell .sc-hnr{min-width:3ch}
+  .sc-hcell .sc-hp{display:inline-block;min-width:2.4ch}
+  .sc-hcell .sc-hsub{color:var(--tl);font-weight:500}
+  /* Het invoervenster zelf mag dan ook breder dan de gewone 520px. */
+  #moScore .md{width:96vw;max-width:min(1100px,96vw)}
+}
 /* Namenrij (headers) blijft zichtbaar tijdens het scrollen door de 18 holes —
    sticky t.o.v. de scrollende modal (.md, zie CSS verderop), met een eigen
    ondoorzichtige achtergrond zodat de holes die eronderdoor scrollen niet
@@ -568,7 +582,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.58.0';
+const APP_VERSION = '1.59.0';
 try{ localStorage.removeItem('klassementToernooi'); }catch(e){}
 (function(){
   const el = document.getElementById('hdrSub');
@@ -4430,7 +4444,26 @@ function stlResetVoorstel(){
   renderStartlijstLijst();
   toast('Voorstel gewist');
 }
+// SLOT OP DE STARTLIJST (sinds v1.58.1): op een trage verbinding duurt
+// opslaan een paar seconden. Wie dan nog een keer tikt, sloeg de startlijst
+// dubbel op. Daarom gaan tijdens het opslaan alle knoppen in het venster even
+// op slot, en doet een tweede tik niets.
+function stlVergrendel(aan){
+  window._stlBezig = aan;
+  document.querySelectorAll('#stlBody button').forEach(b=>{
+    if(aan && !b.disabled){ b.disabled = true; b.dataset.stlSlot = '1'; }
+    else if(!aan && b.dataset.stlSlot){ b.disabled = false; delete b.dataset.stlSlot; }
+  });
+}
+// Alle flights die NU in de database staan voor deze ronde weghalen — niet
+// alleen de flights die bij het openen van het venster bekend waren. Zo
+// ruimt opslaan ook eventuele dubbele flights op.
+async function stlWisActueleFlights(rondeId){
+  const actueel = await sbG('ronde_flights','ronde_id=eq.'+rondeId+'&select=id') || [];
+  for(const f of actueel){ await sbD('ronde_flights', f.id); }
+}
 async function stlOpslaanVoorstel(){
+  if(window._stlBezig) return;
   const ctx = window._stlCtx;
   const v = window._stlVoorstel;
   const gebruikteNrs = Array.from(new Set(Object.values(v.toewijzing)));
@@ -4441,10 +4474,9 @@ async function stlOpslaanVoorstel(){
   // oude flights helemaal — dus eerst de oude flights weg, dan de (evt.
   // bewerkte) indeling opnieuw opslaan, in plaats van ernaast toe te voegen.
   const bewerken = !!(window._stlBewerken && ctx.flights.length);
+  stlVergrendel(true);
   try{
-    if(bewerken){
-      for(const f of ctx.flights){ await sbD('ronde_flights', f.id); }
-    }
+    if(bewerken) await stlWisActueleFlights(ctx.rondeId);
     let volgordeFlight = bewerken ? 1 : (ctx.flights.reduce((m,f)=>Math.max(m,f.volgorde),0) + 1);
     for(const nr of gebruikteNrs){
       const leden = Object.keys(v.toewijzing).filter(sid=>v.toewijzing[sid]===nr)
@@ -4463,6 +4495,7 @@ async function stlOpslaanVoorstel(){
     renderBeheerToernooienPanel();
     toast(bewerken ? 'Startlijst bijgewerkt' : gebruikteNrs.length+' flight(s) opgeslagen');
   }catch(e){ toast('Mislukt: '+e.message, true); }
+  finally{ stlVergrendel(false); }
 }
 // Flights van een ronde in starttijd-volgorde (vroegste eerst) — dus NIET
 // zomaar op het 'volgorde'-veld, want dat is puur de aanmaak-/opslagvolgorde
@@ -4658,21 +4691,28 @@ async function wijzigFlightVeld(id, veld, waarde){
   }catch(e){ toast('Mislukt: '+e.message, true); }
 }
 async function verwijderFlight(id){
+  if(window._stlBezig) return;
   if(!confirm('Deze flight verwijderen?')) return;
+  stlVergrendel(true);
   try{ await sbD('ronde_flights', id); toast('Flight verwijderd'); await renderStartlijstBody(window._stlCtx.rondeId); }
   catch(e){ toast('Mislukt: '+e.message, true); }
+  finally{ stlVergrendel(false); }
 }
 async function wisAlleFlights(){
   const ctx = window._stlCtx;
   if(!ctx.flights.length) return;
+  if(window._stlBezig) return;
   if(!confirm('Alle '+ctx.flights.length+' flight(s) van deze ronde verwijderen? Dit kan niet ongedaan gemaakt worden.')) return;
+  stlVergrendel(true);
   try{
-    for(const f of ctx.flights){ await sbD('ronde_flights', f.id); }
+    await stlWisActueleFlights(ctx.rondeId);
     toast('Alle flights verwijderd');
     await renderStartlijstBody(ctx.rondeId);
   }catch(e){ toast('Mislukt: '+e.message, true); }
+  finally{ stlVergrendel(false); }
 }
 async function importeerStartlijst(){
+  if(window._stlBezig) return;
   const ctx = window._stlCtx;
   const raw = document.getElementById('stlPlak').value.trim();
   if(!raw){ toast('Plak eerst een startlijst', true); return; }
@@ -4694,9 +4734,16 @@ async function importeerStartlijst(){
     if(teKoppelen.length && !confirm('Deze namen staan al in Rondje! (bijvoorbeeld van een eerder toernooi) en worden aan je toernooi gekoppeld:\n\n'+teKoppelen.join('\n')+'\n\nZijn dit dezelfde personen? Kies OK om door te gaan. Zit er iemand anders tussen, kies dan Annuleren en pas die naam in je lijst aan.')) return;
   }
 
+  // Staat er al een startlijst? Dan vervangt de geplakte lijst die (sinds
+  // v1.58.1). Voorheen kwamen de flights erbij, en stond alles dubbel.
+  if(ctx.flights.length && !confirm('Er staat al een startlijst voor deze ronde ('+ctx.flights.length+' flight(s)). De geplakte lijst vervangt die. Doorgaan?')) return;
+
+  stlVergrendel(true);
+  try{ await stlWisActueleFlights(ctx.rondeId); }
+  catch(e){ stlVergrendel(false); toast('Mislukt: '+e.message, true); return; }
   const nieuweSpelers = [];
   let gekoppeldeSpelers = 0;
-  let volgordeFlight = ctx.flights.reduce((m,f)=>Math.max(m,f.volgorde),0) + 1;
+  let volgordeFlight = 1;
 
   for(const block of blocks){
     // Eerste regel is de starttijd, optioneel gevolgd door de starthole
@@ -4736,8 +4783,10 @@ async function importeerStartlijst(){
   }
 
   document.getElementById('stlPlak').value = '';
-  await laadAlles();
-  await renderStartlijstBody(ctx.rondeId);
+  try{
+    await laadAlles();
+    await renderStartlijstBody(ctx.rondeId);
+  }finally{ stlVergrendel(false); }
   renderBeheerToernooienPanel();
   toast(blocks.length+' flight(s) verwerkt · '+gekoppeldeSpelers+' bestaande speler(s) gekoppeld · '+nieuweSpelers.length+' nieuwe account(s)');
 
@@ -6365,7 +6414,7 @@ function scoreGridHtml(ctx){
   for(let i=0;i<ctx.holes.length;i++){
     const h = ctx.holes[i];
     const heeftFunny = extraPrijzenVoorHole(ctx.rondeId, i+1).length>0;
-    cells += `<div class="sc-hcell${heeftFunny?' sc-hcell-funny':''}" ${heeftFunny?`onclick="openHoleFunnieModal('${ctx.rondeId}',${i+1})"`:''}><span class="sc-hnr">H${i+1}</span><span class="sc-hsub">P${h.par} SI${h.si}</span></div>`;
+    cells += `<div class="sc-hcell${heeftFunny?' sc-hcell-funny':''}" ${heeftFunny?`onclick="openHoleFunnieModal('${ctx.rondeId}',${i+1})"`:''}><span class="sc-hnr">H${i+1}</span><span class="sc-hsub"><span class="sc-hp">P${h.par}</span> <span class="sc-hsi">SI${h.si}</span></span></div>`;
     kolomSpelers.forEach((id,ci)=>{
       const {status, waarde, wacht} = scCelStatus(ctx, id, i);
       const punten = scPuntenVoor(ctx, id, i, waarde);
@@ -6379,7 +6428,7 @@ function scoreGridHtml(ctx){
   }
   if(kolomSpelers.length>1) cells += scSubtotalenRijenHtml(ctx, kolomSpelers);
   if(ctx.muntjesAan) cells += scMuntjesRijHtml(ctx, kolomSpelers);
-  return `<div class="sc-grid" style="grid-template-columns:28px repeat(${kolomSpelers.length},1fr)">${cells}</div>`;
+  return `<div class="sc-grid" style="grid-template-columns:var(--sc-hkol,28px) repeat(${kolomSpelers.length},1fr)">${cells}</div>`;
 }
 // MUNTJES SPEL op de gedeelde scorekaart: één regel helemaal onderaan, per
 // speler één vakje. Invulbaar (keuzelijst) zijn je EIGEN vakje en dat van elke
