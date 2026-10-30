@@ -248,6 +248,9 @@ tr:last-child td{border-bottom:none}
    en niet-invoerbaar, alleen tijdens live invoer (niet meer in een gesloten/
    read-only ronde — daar blijft alles gewoon zichtbaar). */
 .sc-head-dim{opacity:.5}
+.sc-medetee{display:block;font-size:.62rem;font-weight:600;color:var(--tl);text-decoration:underline dotted;cursor:pointer;margin-top:1px}
+.sc-medetee-vraag{background:var(--cr);border:1px solid var(--cd);border-radius:10px;padding:10px 12px;margin:0 0 10px;font-family:'Inter',sans-serif;font-size:.8rem;color:var(--td);line-height:1.4}
+.sc-medetee-knoppen{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .sc-medeinvoer{display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-weight:700}
 .sc-medeinvoer input[type="checkbox"]{width:13px;height:13px;margin:0;cursor:pointer;accent-color:var(--gold)}
 /* Score-invoer en stablefordpunten naast elkaar i.p.v. onder elkaar. */
@@ -582,7 +585,7 @@ let SBK = 'sb_publishable_8sV-EaUZ1rCNGbA-G13dSQ_L6IFWSBO';
    kleine fixes, minor voor nieuwe functies, major voor grote ingrepen).
    Wordt getoond in de header, zo zie je in één oogopslag welke versie
    live staat. */
-const APP_VERSION = '1.59.0';
+const APP_VERSION = '1.60.0';
 try{ localStorage.removeItem('klassementToernooi'); }catch(e){}
 (function(){
   const el = document.getElementById('hdrSub');
@@ -6343,7 +6346,66 @@ function scHoleScoresWeergave(ctx, spelerId){
 function scPlayingHcpVoor(ctx, subjectId){
   if(subjectId===ctx.spelerId) return ctx.currentPH;
   const rij = (ctx.kolomScores||[]).find(s=>s.speler_id===subjectId);
-  return rij && rij.playing_hcp!=null ? rij.playing_hcp : null;
+  if(rij && rij.playing_hcp!=null) return rij.playing_hcp;
+  // Nog geen eigen tee van die medespeler: dan de tee die de invoerder voor
+  // hem koos (alleen op dit toestel, sinds v1.60.0), of de enige tee.
+  const tee = scMedeTee(ctx, subjectId);
+  const sp = allSpelers.find(x=>x.id===subjectId);
+  if(!tee || !sp || sp.exact_hcp==null) return null;
+  const h = kaartHcp(rij||null, sp, tee, ctx.toernooi);
+  return h && h.pH!=null ? h.pH : null;
+}
+// TEE VOOR EEN MEDESPELER (sinds v1.60.0). Heeft een medespeler zelf nog geen
+// tee gekozen, dan kiest de invoerder die voor hem. Die keuze blijft op dit
+// toestel (per ronde en invoerder) en dient alleen voor de punten en de
+// streep in zijn kolom hier. Zijn eigen kaart verandert niet; kiest hij zelf
+// een tee, dan geldt die.
+function scMedeTeeKey(ctx){ return 'scMedeTee_'+ctx.rondeId+'_'+ctx.spelerId; }
+function scMedeTeeLees(ctx){ try{ return JSON.parse(localStorage.getItem(scMedeTeeKey(ctx))||'{}')||{}; }catch(e){ return ctx._medeTee||{}; } }
+function scMedeTeeZet(ctx, subjectId, teeId){
+  const m = scMedeTeeLees(ctx); m[subjectId] = teeId; ctx._medeTee = m;
+  try{ localStorage.setItem(scMedeTeeKey(ctx), JSON.stringify(m)); }catch(e){}
+}
+function scMedeTee(ctx, subjectId){
+  const rij = (ctx.kolomScores||[]).find(s=>s.speler_id===subjectId);
+  if(rij && rij.tee_id) return teeById(rij.tee_id) || null;
+  const tees = ctx.tees||[];
+  const gekozen = scMedeTeeLees(ctx)[subjectId] || (ctx._medeTee||{})[subjectId];
+  if(gekozen && tees.some(t=>t.id===gekozen)) return teeById(gekozen);
+  return tees.length===1 ? tees[0] : null;
+}
+// Is de tee van deze medespeler alleen hier gekozen (en kan hij dus nog anders)?
+function scMedeTeeAlleenHier(ctx, subjectId){
+  const rij = (ctx.kolomScores||[]).find(s=>s.speler_id===subjectId);
+  if(rij && (rij.playing_hcp!=null || rij.tee_id)) return false;
+  return (ctx.tees||[]).length>1 && !!scMedeTee(ctx, subjectId);
+}
+function scVraagMedeTee(ci, daarna){
+  const ctx = window._scCtx; if(!ctx) return;
+  const sid = (ctx.kolomSpelers||[])[ci];
+  const sp = allSpelers.find(x=>x.id===sid);
+  const naam = sp ? sp.naam.split(' ')[0] : 'deze speler';
+  window._scMedeTeeDaarna = daarna || null;
+  let vak = document.getElementById('scMedeTeeVraag');
+  const grid = document.getElementById('scGrid');
+  if(!vak && grid){ vak = document.createElement('div'); vak.id = 'scMedeTeeVraag'; grid.parentNode.insertBefore(vak, grid); }
+  if(!vak) return;
+  const huidig = scMedeTee(ctx, sid);
+  vak.className = 'sc-medetee-vraag';
+  vak.innerHTML = `<div><b>Van welke tee speelt ${esc(naam)}?</b> Dan kloppen de punten in zijn kolom en werkt een streep (0). Dit geldt alleen op jouw telefoon; ${esc(naam)} kiest op zijn eigen kaart zelf.</div>
+    <div class="sc-medetee-knoppen">${(ctx.tees||[]).map(t=>`<button type="button" class="btn bsm ${huidig&&huidig.id===t.id?'bp':'bg'}" onclick="scKiesMedeTee(${ci},'${t.id}')">${esc(t.kleur)}</button>`).join('')}
+    <button type="button" class="btn bsm bg" onclick="scSluitMedeTeeVraag()">Later</button></div>`;
+  vak.scrollIntoView({block:'nearest'});
+}
+function scSluitMedeTeeVraag(){ const v = document.getElementById('scMedeTeeVraag'); if(v) v.remove(); window._scMedeTeeDaarna = null; }
+function scKiesMedeTee(ci, teeId){
+  const ctx = window._scCtx; if(!ctx) return;
+  scMedeTeeZet(ctx, ctx.kolomSpelers[ci], teeId);
+  const daarna = window._scMedeTeeDaarna;
+  scSluitMedeTeeVraag();
+  const grid = document.getElementById('scGrid');
+  if(grid) grid.innerHTML = scoreGridHtml(ctx);
+  if(daarna) daarna();
 }
 function scPuntenVoor(ctx, subjectId, holeIndex, waarde){
   if(waarde==null) return null;
@@ -6388,6 +6450,8 @@ function scToggleMedespelerInvoer(ci){
   }catch(e){ /* localStorage niet beschikbaar (bv. privénavigatie) — vinkje werkt dan alleen voor deze render */ }
   const grid = document.getElementById('scGrid');
   if(grid) grid.innerHTML = scoreGridHtml(ctx);
+  const sid = (ctx.kolomSpelers||[])[ci];
+  if(scActieveMedespelerKolommen(ctx).includes(ci) && (ctx.tees||[]).length>1 && scPlayingHcpVoor(ctx, sid)==null && !(ctx.kolomScores||[]).some(s=>s.speler_id===sid && s.tee_id)) scVraagMedeTee(ci);
 }
 // Kolomindexen die nu daadwerkelijk invoerbaar zijn: altijd je eigen kolom
 // (0), plus alle aangevinkte medespeler-kolommen, van links naar rechts —
@@ -6409,7 +6473,7 @@ function scoreGridHtml(ctx){
     // Alleen tijdens live invoer dimmen/uitschakelen; in een gesloten/
     // read-only ronde blijft de hele kaart gewoon volledig zichtbaar.
     const gedimd = !actieveKolommen.includes(ci) && !ctx.readOnly;
-    cells += `<div class="sc-head${gedimd?' sc-head-dim':''}"><label class="sc-medeinvoer" title="Ook scores voor ${esc(namen[ci]||'?')} invoeren"><input type="checkbox" ${actieveKolommen.includes(ci)?'checked':''} ${ctx.readOnly?'disabled':''} onchange="scToggleMedespelerInvoer(${ci})">${esc((namen[ci]||'?').split(' ')[0])}</label></div>`;
+    cells += `<div class="sc-head${gedimd?' sc-head-dim':''}"><label class="sc-medeinvoer" title="Ook scores voor ${esc(namen[ci]||'?')} invoeren"><input type="checkbox" ${actieveKolommen.includes(ci)?'checked':''} ${ctx.readOnly?'disabled':''} onchange="scToggleMedespelerInvoer(${ci})">${esc((namen[ci]||'?').split(' ')[0])}</label>${(!ctx.readOnly && scMedeTeeAlleenHier(ctx,id)) ? `<span class="sc-medetee" onclick="scVraagMedeTee(${ci})" title="Tee wijzigen">${esc(scMedeTee(ctx,id).kleur)}</span>` : ''}</div>`;
   });
   for(let i=0;i<ctx.holes.length;i++){
     const h = ctx.holes[i];
@@ -6619,7 +6683,19 @@ function scGridInputVeranderd(kolomIdx, holeIndex, aantalHoles){
     const ctx = window._scCtx;
     const subjectId = (ctx.kolomSpelers||[])[kolomIdx];
     const rij = (ctx.kolomScores||[]).find(x=>x.speler_id===subjectId);
-    const pH = subjectId===ctx.spelerId ? ctx.currentPH : (rij && rij.playing_hcp!=null ? rij.playing_hcp : null);
+    const pH = scPlayingHcpVoor(ctx, subjectId);
+    // Medespeler zonder bekende tee (sinds v1.60.0): eerst vragen van welke
+    // tee hij speelt; daarna alsnog de streep invullen.
+    if(pH==null && subjectId!==ctx.spelerId && (ctx.tees||[]).length){
+      el.value='';
+      scVraagMedeTee(kolomIdx, ()=>{
+        const w2 = streepWaarde(ctx.holes[holeIndex], scPlayingHcpVoor(ctx, subjectId));
+        const el2 = document.getElementById('scc_'+kolomIdx+'_'+holeIndex);
+        if(w2==null || !el2) return;
+        el2.value = w2; scGridCommit(kolomIdx, holeIndex, aantalHoles);
+      });
+      return;
+    }
     const w = streepWaarde(ctx.holes[holeIndex], pH);
     if(w==null){
       const sp = allSpelers.find(x=>x.id===subjectId);
